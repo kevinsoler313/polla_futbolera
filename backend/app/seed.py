@@ -11,70 +11,92 @@ GRUPOS_DATA = {
     "A": [
         {"nombre": "México", "bandera": "🇲🇽"},
         {"nombre": "Ecuador", "bandera": "🇪🇨"},
-        {"nombre": "Bolivia", "bandera": "🇧🇴"},
+        {"nombre": "Guinea", "bandera": "🇬🇳"},
+        {"nombre": "Nueva Zelanda", "bandera": "🇳🇿"},
     ],
     "B": [
         {"nombre": "Argentina", "bandera": "🇦🇷"},
-        {"nombre": "Chile", "bandera": "🇨🇱"},
-        {"nombre": "Perú", "bandera": "🇵🇪"},
+        {"nombre": "Serbia", "bandera": "🇷🇸"},
+        {"nombre": "Irán", "bandera": "🇮🇷"},
+        {"nombre": "RD Congo", "bandera": "🇨🇩"},
     ],
     "C": [
-        {"nombre": "Brasil", "bandera": "🇧🇷"},
-        {"nombre": "Paraguay", "bandera": "🇵🇾"},
-        {"nombre": "Venezuela", "bandera": "🇻🇪"},
+        {"nombre": "Canadá", "bandera": "🇨🇦"},
+        {"nombre": "Inglaterra", "bandera": "🏴󠁧󠁢󠁥󠁮󠁧󠁿"},
+        {"nombre": "Perú", "bandera": "🇵🇪"},
+        {"nombre": "Uzbekistán", "bandera": "🇺🇿"},
     ],
     "D": [
+        {"nombre": "Estados Unidos", "bandera": "🇺🇸"},
         {"nombre": "Colombia", "bandera": "🇨🇴"},
-        {"nombre": "Uruguay", "bandera": "🇺🇾"},
-        {"nombre": "Panamá", "bandera": "🇵🇦"},
+        {"nombre": "Polonia", "bandera": "🇵🇱"},
+        {"nombre": "Japón", "bandera": "🇯🇵"},
     ],
     "E": [
-        {"nombre": "España", "bandera": "🇪🇸"},
-        {"nombre": "Portugal", "bandera": "🇵🇹"},
-        {"nombre": "Escocia", "bandera": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"},
+        {"nombre": "Brasil", "bandera": "🇧🇷"},
+        {"nombre": "Países Bajos", "bandera": "🇳🇱"},
+        {"nombre": "Egipto", "bandera": "🇪🇬"},
+        {"nombre": "Jamaica", "bandera": "🇯🇲"},
     ],
     "F": [
         {"nombre": "Francia", "bandera": "🇫🇷"},
-        {"nombre": "Alemania", "bandera": "🇩🇪"},
+        {"nombre": "Marruecos", "bandera": "🇲🇦"},
         {"nombre": "Turquía", "bandera": "🇹🇷"},
+        {"nombre": "Costa Rica", "bandera": "🇨🇷"},
     ],
     "G": [
-        {"nombre": "Inglaterra", "bandera": "🏴󠁧󠁢󠁥󠁮󠁧󠁿"},
-        {"nombre": "Países Bajos", "bandera": "🇳🇱"},
-        {"nombre": "Noruega", "bandera": "🇳🇴"},
+        {"nombre": "Alemania", "bandera": "🇩🇪"},
+        {"nombre": "Uruguay", "bandera": "🇺🇾"},
+        {"nombre": "Corea del Sur", "bandera": "🇰🇷"},
+        {"nombre": "Mali", "bandera": "🇲🇱"},
     ],
     "H": [
-        {"nombre": "Bélgica", "bandera": "🇧🇪"},
-        {"nombre": "Austria", "bandera": "🇦🇹"},
-        {"nombre": "Eslovaquia", "bandera": "🇸🇰"},
+        {"nombre": "España", "bandera": "🇪🇸"},
+        {"nombre": "Suiza", "bandera": "🇨🇭"},
+        {"nombre": "Australia", "bandera": "🇦🇺"},
+        {"nombre": "Panamá", "bandera": "🇵🇦"},
     ],
     "I": [
-        {"nombre": "Marruecos", "bandera": "🇲🇦"},
-        {"nombre": "Egipto", "bandera": "🇪🇬"},
-        {"nombre": "Senegal", "bandera": "🇸🇳"},
+        {"nombre": "Portugal", "bandera": "🇵🇹"},
+        {"nombre": "Italia", "bandera": "🇮🇹"},
+        {"nombre": "Camerún", "bandera": "🇨🇲"},
+        {"nombre": "Emiratos Árabes", "bandera": "🇦🇪"},
     ],
     "J": [
+        {"nombre": "Bélgica", "bandera": "🇧🇪"},
         {"nombre": "Nigeria", "bandera": "🇳🇬"},
-        {"nombre": "Costa de Marfil", "bandera": "🇨🇮"},
-        {"nombre": "Camerún", "bandera": "🇨🇲"},
+        {"nombre": "Irak", "bandera": "🇮🇶"},
+        {"nombre": "Honduras", "bandera": "🇭🇳"},
     ],
     "K": [
-        {"nombre": "Japón", "bandera": "🇯🇵"},
-        {"nombre": "Corea del Sur", "bandera": "🇰🇷"},
-        {"nombre": "Arabia Saudita", "bandera": "🇸🇦"},
+        {"nombre": "Croacia", "bandera": "🇭🇷"},
+        {"nombre": "Dinamarca", "bandera": "🇩🇰"},
+        {"nombre": "Sudáfrica", "bandera": "🇿🇦"},
+        {"nombre": "Omán", "bandera": "🇴🇲"},
     ],
     "L": [
-        {"nombre": "Australia", "bandera": "🇦🇺"},
-        {"nombre": "Irán", "bandera": "🇮🇷"},
-        {"nombre": "Estados Unidos", "bandera": "🇺🇸"},
+        {"nombre": "Austria", "bandera": "🇦🇹"},
+        {"nombre": "Ucrania", "bandera": "🇺🇦"},
+        {"nombre": "Ghana", "bandera": "🇬🇭"},
+        {"nombre": "Chile", "bandera": "🇨🇱"},
     ],
 }
 
 
 def seed_database(db: Session):
-    """Inserta datos iniciales si la BD está vacía."""
-    if db.query(Grupo).count() > 0:
-        return  # Ya tiene datos
+    """Inserta datos iniciales. Si hay datos pero no son los 48 equipos de 2026, los refresca."""
+    equipo_count = db.query(Equipo).count()
+    
+    if equipo_count == 48:
+        return  # Ya tiene los datos correctos
+    
+    if equipo_count > 0:
+        print("[INFO] Actualizando base de datos a formato Mundial 2026 (48 equipos)...")
+        # Limpiar tablas para evitar conflictos de integridad
+        db.query(Partido).delete()
+        db.query(Equipo).delete()
+        db.query(Grupo).delete()
+        db.commit()
 
     equipo_map: dict[str, int] = {}
 
@@ -93,17 +115,13 @@ def seed_database(db: Session):
             db.flush()
             equipo_map[eq.nombre] = eq.id
 
-        # Crear los 3 partidos del grupo (round-robin: 0v1, 0v2, 1v2)
+        # Crear los partidos del grupo (round-robin: 6 partidos para 4 equipos)
         equipo_ids = []
         for eq_data in equipos:
             equipo_ids.append(equipo_map[eq_data["nombre"]])
 
-        partidos = [
-            (equipo_ids[0], equipo_ids[1]),
-            (equipo_ids[0], equipo_ids[2]),
-            (equipo_ids[1], equipo_ids[2]),
-        ]
-        for e1, e2 in partidos:
+        import itertools
+        for e1, e2 in itertools.combinations(equipo_ids, 2):
             partido = Partido(
                 id_equipo1=e1,
                 id_equipo2=e2,
