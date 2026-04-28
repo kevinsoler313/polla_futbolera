@@ -1,0 +1,51 @@
+# =========================
+# Backend (Python / FastAPI)
+# =========================
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Archivos compilados y caché
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Base de datos local (opcional, pero recomendado no subirla)
+*.db
+*.sqlite3
+
+# Variables de entorno
+.env
+
+# =========================
+# Frontend (Node / React / Vite)
+# =========================
+# Dependencias
+node_modules/
+frontend/node_modules/
+
+# Archivos de construcción (Build)
+dist/
+build/
+.vite/
+
+# Logs de npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# IDEs y SO
+# =========================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
