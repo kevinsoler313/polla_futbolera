@@ -1,9 +1,10 @@
 """
 Controller de Equipos y Grupos - datos del mundial
 """
+from __future__ import annotations
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
 from pydantic import BaseModel
 
 from app.database import get_db
@@ -16,8 +17,8 @@ router = APIRouter(prefix="/api/mundial", tags=["Mundial"])
 class EquipoResponse(BaseModel):
     id: int
     nombre: str
-    bandera: str | None
-    grupo_id: int | None
+    bandera: Optional[str]
+    grupo_id: Optional[int]
     model_config = {"from_attributes": True}
 
 
@@ -25,12 +26,12 @@ class PartidoResponse(BaseModel):
     id: int
     id_equipo1: int
     id_equipo2: int
-    goles_equipo1: int | None
-    goles_equipo2: int | None
+    goles_equipo1: Optional[int]
+    goles_equipo2: Optional[int]
     fase: str
-    id_grupo: int | None
-    equipo1: EquipoResponse | None = None
-    equipo2: EquipoResponse | None = None
+    id_grupo: Optional[int]
+    equipo1: Optional[EquipoResponse] = None
+    equipo2: Optional[EquipoResponse] = None
     model_config = {"from_attributes": True}
 
 class GrupoResponse(BaseModel):
@@ -46,7 +47,7 @@ class GrupoResponse(BaseModel):
 @router.get("/grupos", response_model=List[GrupoResponse])
 def listar_grupos(db: Session = Depends(get_db)):
     """Lista todos los grupos con sus equipos y partidos."""
-    return db.query(Grupo).order_by(Grupo.nombre).all()
+    return db.query(Grupo).options(joinedload(Grupo.equipos)).order_by(Grupo.nombre).all()
 
 
 @router.get("/equipos", response_model=List[EquipoResponse])
@@ -56,7 +57,7 @@ def listar_equipos(db: Session = Depends(get_db)):
 
 
 @router.get("/partidos", response_model=List[PartidoResponse])
-def listar_partidos(fase: str | None = None, id_grupo: int | None = None, db: Session = Depends(get_db)):
+def listar_partidos(fase: Optional[str] = None, id_grupo: Optional[int] = None, db: Session = Depends(get_db)):
     """Lista partidos, filtrable por fase o grupo."""
     query = db.query(Partido)
     if fase:

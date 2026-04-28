@@ -80,8 +80,8 @@ class Partido(Base):
     __tablename__ = "partido"
 
     id = Column(Integer, primary_key=True, index=True)
-    id_equipo1 = Column(Integer, ForeignKey("equipo.id"), nullable=False)
-    id_equipo2 = Column(Integer, ForeignKey("equipo.id"), nullable=False)
+    id_equipo1 = Column(Integer, ForeignKey("equipo.id"), nullable=True)
+    id_equipo2 = Column(Integer, ForeignKey("equipo.id"), nullable=True)
     goles_equipo1 = Column(Integer, nullable=True)    # None = no jugado
     goles_equipo2 = Column(Integer, nullable=True)
     fase = Column(String(30), nullable=False)          # "grupos", "1/16", "octavos", etc.

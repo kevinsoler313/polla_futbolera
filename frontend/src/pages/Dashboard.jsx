@@ -2,27 +2,32 @@ import { useState, useEffect } from 'react';
 import { mundialService, prediccionService } from '../services/api';
 import './Dashboard.css';
 
+
+
 const Dashboard = () => {
   const [grupos, setGrupos] = useState([]);
   const [misPredicciones, setMisPredicciones] = useState([]);
   const [misPrediccionesPartidos, setMisPrediccionesPartidos] = useState([]);
+  const [allEquipos, setAllEquipos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState({ text: '', type: '' });
-  const [view, setView] = useState('clasificados'); // 'clasificados' o 'partidos'
+  const [view, setView] = useState('clasificados'); // 'clasificados', 'partidos', 'tablas'
 
   // Cargar datos
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataGrupos, dataPredicciones, dataPredPartidos] = await Promise.all([
+        const [dataGrupos, dataPredicciones, dataPredPartidos, dataEquipos] = await Promise.all([
           mundialService.grupos(),
           prediccionService.misGrupos(),
-          prediccionService.misPartidos()
+          prediccionService.misPartidos(),
+          mundialService.equipos()
         ]);
         setGrupos(dataGrupos);
         setMisPredicciones(dataPredicciones);
         setMisPrediccionesPartidos(dataPredPartidos);
+        setAllEquipos(dataEquipos);
       } catch (error) {
         console.error("Error cargando datos:", error);
       } finally {
@@ -32,42 +37,137 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  // Seleccionar o deseleccionar un equipo como clasificado
-  const toggleClasificado = (grupoId, equipoId) => {
-    setMisPredicciones(prev => {
-      // Filtrar las predicciones actuales para este grupo
-      const predsGrupo = prev.filter(p => {
-        const equipoInfo = grupos.find(g => g.id === grupoId).equipos.find(e => e.id === p.id_equipo);
-        return equipoInfo !== undefined;
-      });
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverItem, setDragOverItem] = useState(null);
 
-      const existe = predsGrupo.find(p => p.id_equipo === equipoId);
-      
-      if (existe) {
-        // Si ya existe, lo quitamos
-        return prev.filter(p => p.id_equipo !== equipoId);
-      } else {
-        // Si no existe, verificamos si ya hay 2 seleccionados
-        if (predsGrupo.length >= 2) {
-          // Si ya hay 2, reemplazamos el que tenga posición 2
-          const prevSinPos2 = prev.filter(p => {
-            const eqInfo = grupos.find(g => g.id === grupoId).equipos.find(e => e.id === p.id_equipo);
-            if (eqInfo && p.posicion === 2) return false;
-            return true;
-          });
-          return [...prevSinPos2, { id_equipo: equipoId, posicion: 2 }];
-        } else {
-          // Si hay menos de 2, lo agregamos (1 o 2 dependiendo)
-          const nuevaPos = predsGrupo.length === 0 ? 1 : 2;
-          return [...prev, { id_equipo: equipoId, posicion: nuevaPos }];
+  const getEquiposOrdenados = (grupoId, equipos) => {
+    const preds = misPredicciones.filter(p => equipos.some(e => e.id === p.id_equipo));
+    if (preds.length === 0) return equipos;
+
+    return [...equipos].sort((a, b) => {
+      const posA = preds.find(p => p.id_equipo === a.id)?.posicion || 99;
+      const posB = preds.find(p => p.id_equipo === b.id)?.posicion || 99;
+      return posA - posB;
+    });
+  };
+
+  const calculateGroupTable = (grupoId, equipos) => {
+    const stats = equipos.reduce((acc, eq) => {
+      acc[eq.id] = { ...eq, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0, pts: 0 };
+      return acc;
+    }, {});
+
+    const grupoMatches = grupos.find(g => g.id === grupoId)?.partidos || [];
+    
+    grupoMatches.forEach(match => {
+      const pred = misPrediccionesPartidos.find(p => p.id_partido === match.id);
+      if (pred) {
+        const g1 = pred.goles_equipo1;
+        const g2 = pred.goles_equipo2;
+        const e1 = match.id_equipo1;
+        const e2 = match.id_equipo2;
+
+        if (stats[e1] && stats[e2]) {
+          stats[e1].pj += 1;
+          stats[e2].pj += 1;
+          stats[e1].gf += g1;
+          stats[e1].gc += g2;
+          stats[e2].gf += g2;
+          stats[e2].gc += g1;
+          stats[e1].dg = stats[e1].gf - stats[e1].gc;
+          stats[e2].dg = stats[e2].gf - stats[e2].gc;
+
+          if (g1 > g2) {
+            stats[e1].pg += 1;
+            stats[e1].pts += 3;
+            stats[e2].pp += 1;
+          } else if (g1 < g2) {
+            stats[e2].pg += 1;
+            stats[e2].pts += 3;
+            stats[e1].pp += 1;
+          } else {
+            stats[e1].pe += 1;
+            stats[e1].pts += 1;
+            stats[e2].pe += 1;
+            stats[e2].pts += 1;
+          }
         }
       }
     });
+
+    return Object.values(stats).sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.dg !== a.dg) return b.dg - a.dg;
+      return b.gf - a.gf;
+    });
+  };
+
+  const getMejoresTerceros = () => {
+    const terceros = grupos.map(g => {
+      const table = calculateGroupTable(g.id, g.equipos);
+      return { ...table[2], grupo: g.nombre }; // Index 2 is 3rd place
+    }).filter(t => t !== undefined);
+
+    return terceros.sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.dg !== a.dg) return b.dg - a.dg;
+      return b.gf - a.gf;
+    });
+  };
+
+  const handleDragStart = (e, grupoId, equipoId) => {
+    setDraggedItem({ grupoId, equipoId });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', equipoId);
+  };
+
+  const handleDragOver = (e, grupoId, equipoId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!dragOverItem || dragOverItem.equipoId !== equipoId) {
+      setDragOverItem({ grupoId, equipoId });
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverItem(null);
+  };
+
+  const handleDrop = (e, grupoId, targetEquipoId) => {
+    e.preventDefault();
+    setDragOverItem(null);
+    
+    if (!draggedItem || draggedItem.grupoId !== grupoId || draggedItem.equipoId === targetEquipoId) {
+      return;
+    }
+
+    const equiposDelGrupo = grupos.find(g => g.id === grupoId).equipos;
+    const ordenActual = getEquiposOrdenados(grupoId, equiposDelGrupo);
+    
+    const draggedIndex = ordenActual.findIndex(e => e.id === draggedItem.equipoId);
+    const targetIndex = ordenActual.findIndex(e => e.id === targetEquipoId);
+
+    const nuevoOrden = [...ordenActual];
+    const [removed] = nuevoOrden.splice(draggedIndex, 1);
+    nuevoOrden.splice(targetIndex, 0, removed);
+
+    const nuevasPredsDelGrupo = nuevoOrden.map((equipo, index) => ({
+      id_equipo: equipo.id,
+      posicion: index + 1
+    }));
+
+    setMisPredicciones(prev => {
+      const otrasPreds = prev.filter(p => !equiposDelGrupo.some(e => e.id === p.id_equipo));
+      return [...otrasPreds, ...nuevasPredsDelGrupo];
+    });
+    
+    setDraggedItem(null);
   };
 
   const handleScoreChange = (partidoId, equipo, valor) => {
     setMisPrediccionesPartidos(prev => {
       const existe = prev.find(p => p.id_partido === partidoId);
+      
       if (existe) {
         return prev.map(p => 
           p.id_partido === partidoId 
@@ -100,15 +200,35 @@ const Dashboard = () => {
       setMensaje({ text: '¡Predicciones guardadas con éxito!', type: 'success' });
       setTimeout(() => setMensaje({ text: '', type: '' }), 3000);
     } catch (error) {
-      setMensaje({ text: 'Error al guardar las predicciones', type: 'error' });
+      setMensaje({ text: error.message || 'Error al guardar las predicciones', type: 'error' });
     } finally {
       setSaving(false);
     }
   };
 
+
+
   const [grupoActivo, setGrupoActivo] = useState(0);
 
+  const getEquipoById = (id) => {
+    if (!id) return { nombre: 'TBD', bandera: '❓' };
+    const targetId = String(id);
+    const eq = allEquipos.find(e => String(e.id) === targetId);
+    if (eq) return eq;
+    
+    // Fallback si no está en allEquipos por alguna razón
+    for (const g of grupos) {
+      const found = g.equipos?.find(e => String(e.id) === targetId);
+      if (found) return found;
+    }
+    return { nombre: 'TBD', bandera: '❓' };
+  };
+
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+
+
+  
+
 
   return (
     <div className="dashboard-container">
@@ -131,14 +251,24 @@ const Dashboard = () => {
             >
               ⚽ Marcadores
             </button>
+            <button 
+              className={`view-btn ${view === 'tablas' ? 'active' : ''}`}
+              onClick={() => setView('tablas')}
+            >
+              📊 Tablas
+            </button>
+
           </div>
-          <button 
-            className="btn-primary" 
-            onClick={guardarApuestas}
-            disabled={saving}
-          >
-            {saving ? 'Guardando...' : '💾 Guardar'}
-          </button>
+          <div className="action-buttons" style={{ display: 'flex', gap: '0.5rem' }}>
+
+            <button 
+              className="btn-primary" 
+              onClick={guardarApuestas}
+              disabled={saving}
+            >
+              {saving ? 'Guardando...' : '💾 Guardar'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -148,60 +278,64 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Tabs de Grupos */}
-      <div className="grupos-tabs-container">
-        <div className="grupos-tabs">
-          {grupos.map((grupo, index) => (
-            <button
-              key={grupo.id}
-              className={`tab-item ${grupoActivo === index ? 'active' : ''}`}
-              onClick={() => setGrupoActivo(index)}
-            >
-              {grupo.nombre}
-            </button>
-          ))}
+      {view === 'partidos' && (
+        <div className="grupos-tabs-container">
+          <div className="grupos-tabs">
+            {grupos.map((grupo, index) => (
+              <button
+                key={grupo.id}
+                className={`tab-item ${grupoActivo === index ? 'active' : ''}`}
+                onClick={() => setGrupoActivo(index)}
+              >
+                {grupo.nombre}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grupo-detalle-view">
-        {grupos[grupoActivo] && view === 'clasificados' && (
-          <div key={grupos[grupoActivo].id} className="grupo-card glass-panel animate-fade-in">
-            <div className="grupo-title">
-              <h3>Clasificados Grupo {grupos[grupoActivo].nombre}</h3>
-              <span className="selecciones-badge">
-                {misPredicciones.filter(p => 
-                  grupos[grupoActivo].equipos.some(e => e.id === p.id_equipo)
-                ).length}/2 clasificados
-              </span>
-            </div>
-            
-            <ul className="equipos-list">
-              {grupos[grupoActivo].equipos.map((equipo) => {
-                const seleccion = misPredicciones.find(s => s.id_equipo === equipo.id);
-                const isSelected = !!seleccion;
+        {view === 'clasificados' && (
+          <div className="grupos-grid animate-fade-in">
+            {grupos.map((grupo) => (
+              <div key={grupo.id} className="grupo-card glass-panel">
+                <div className="grupo-title">
+                  <h3>Grupo {grupo.nombre}</h3>
+                  <span className="selecciones-badge">
+                    {misPredicciones.filter(p => 
+                      grupo.equipos.some(e => e.id === p.id_equipo)
+                    ).length}/4
+                  </span>
+                </div>
                 
-                return (
-                  <li 
-                    key={equipo.id} 
-                    className={`equipo-item ${isSelected ? 'selected' : ''}`}
-                    onClick={() => toggleClasificado(grupos[grupoActivo].id, equipo.id)}
-                  >
-                    <div className="equipo-info">
-                      <span className="equipo-bandera">{equipo.bandera}</span>
-                      <span className="equipo-nombre">{equipo.nombre}</span>
-                    </div>
+                <ul className="equipos-list">
+                  {getEquiposOrdenados(grupo.id, grupo.equipos).map((equipo, index) => {
+                    const posicion = index + 1;
+                    const isDragOver = dragOverItem?.equipoId === equipo.id;
                     
-                    {isSelected ? (
-                      <span className={`posicion-badge pos-${seleccion.posicion}`}>
-                        {seleccion.posicion}°
-                      </span>
-                    ) : (
-                      <div className="select-circle"></div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                    return (
+                      <li 
+                        key={equipo.id} 
+                        className={`equipo-item pos-${posicion} ${isDragOver ? 'drag-over' : ''}`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, grupo.id, equipo.id)}
+                        onDragOver={(e) => handleDragOver(e, grupo.id, equipo.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, grupo.id, equipo.id)}
+                      >
+                        <div className="posicion-numero">{posicion}°</div>
+                        <div className="equipo-info" style={{ flex: 1, marginLeft: '1rem' }}>
+                          <span className="equipo-bandera">{equipo.bandera}</span>
+                          <span className="equipo-nombre">{equipo.nombre}</span>
+                        </div>
+                        
+                        <div className="drag-handle">≡</div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
 
@@ -239,6 +373,79 @@ const Dashboard = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {view === 'tablas' && (
+          <div className="tablas-simuladas-container animate-fade-in">
+            <h2 className="section-title" style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              📊 Pronóstico de Tablas y Mejores Terceros
+            </h2>
+            
+            <div className="tablas-main-layout">
+              <div className="tablas-grupos-grid">
+                {grupos.map((grupo) => {
+                  const tableData = calculateGroupTable(grupo.id, grupo.equipos);
+                  return (
+                    <div key={grupo.id} className="tablas-grupo-card">
+                      <div className="tablas-grupo-header">Grupo {grupo.nombre}</div>
+                      <div className="tablas-col-header">
+                        <span></span>
+                        <span>Equipo</span>
+                        <span>Pts</span>
+                        <span>DG</span>
+                      </div>
+                      {tableData.map((eq, idx) => {
+                        const posicion = idx + 1;
+                        const rowClass = posicion <= 2 ? 'clasificado' : posicion === 3 ? 'tercero' : 'eliminado';
+                        return (
+                          <div key={eq.id} className={`tablas-fila tablas-fila--${rowClass}`}>
+                            <span className="tablas-pos">{posicion}°</span>
+                            <span className="tablas-equipo">
+                              <span className="tablas-bandera">{eq.bandera}</span>
+                              <span className="tablas-nombre">{eq.nombre}</span>
+                            </span>
+                            <span className="tablas-pts">{eq.pts}</span>
+                            <span className={`tablas-dg ${eq.dg > 0 ? 'pos' : eq.dg < 0 ? 'neg' : ''}`}>
+                              {eq.dg > 0 ? `+${eq.dg}` : eq.dg}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="tablas-sidebar">
+                <div className="tablas-grupo-card mejores-terceros-card">
+                  <div className="tablas-grupo-header">🏆 Mejores Terceros</div>
+                  <div className="tablas-col-header">
+                    <span>Pos</span>
+                    <span>Equipo (G)</span>
+                    <span>Pts</span>
+                    <span>DG</span>
+                  </div>
+                  {getMejoresTerceros().map((eq, idx) => {
+                    const posicion = idx + 1;
+                    const rowClass = posicion <= 8 ? 'clasificado' : 'eliminado';
+                    return (
+                      <div key={eq.id} className={`tablas-fila tablas-fila--${rowClass}`}>
+                        <span className="tablas-pos">{posicion}°</span>
+                        <span className="tablas-equipo">
+                          <span className="tablas-bandera">{eq.bandera}</span>
+                          <span className="tablas-nombre">{eq.nombre} <small>({eq.grupo})</small></span>
+                        </span>
+                        <span className="tablas-pts">{eq.pts}</span>
+                        <span className={`tablas-dg ${eq.dg > 0 ? 'pos' : eq.dg < 0 ? 'neg' : ''}`}>
+                          {eq.dg > 0 ? `+${eq.dg}` : eq.dg}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

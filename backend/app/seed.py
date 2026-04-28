@@ -130,5 +130,24 @@ def seed_database(db: Session):
             )
             db.add(partido)
 
+    # ── Partidos de Eliminatoria (vacíos) ──────────────────────────────────────
+    fases_eliminatorias = {
+        "1/16": 16,
+        "octavos": 8,
+        "cuartos": 4,
+        "semis": 2,
+        "tercer_puesto": 1,
+        "final": 1
+    }
+    for fase, num_partidos in fases_eliminatorias.items():
+        for _ in range(num_partidos):
+            partido = Partido(
+                id_equipo1=None,
+                id_equipo2=None,
+                fase=fase,
+                id_grupo=None
+            )
+            db.add(partido)
+
     db.commit()
     print("[OK] Base de datos inicializada con equipos y partidos del Mundial 2026")

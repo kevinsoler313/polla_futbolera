@@ -12,8 +12,25 @@ const getHeaders = () => {
 };
 
 const handleResponse = async (res) => {
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Error en el servidor");
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (err) {
+    // Si la respuesta no es JSON, capturamos el error silenciosamente
+  }
+
+  if (!res.ok) {
+    let errorMessage = "Error inesperado en el servidor";
+    if (data.detail) {
+      if (typeof data.detail === "string") {
+        errorMessage = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        // Para errores de validación de Pydantic (422)
+        errorMessage = data.detail.map((err) => err.msg).join(", ");
+      }
+    }
+    throw new Error(errorMessage);
+  }
   return data;
 };
 
@@ -76,6 +93,7 @@ export const prediccionService = {
     fetch(`${API_BASE}/predicciones/grupos/mis`, {
       headers: getHeaders(),
     }).then(handleResponse),
+
 };
 
 // ── Usuarios (ranking) ──────────────────────────────────────────────────────
