@@ -140,6 +140,7 @@ class PrediccionGrupo(Base):
     id_usuario = Column(Integer, ForeignKey("usuario.id"), nullable=False)
     id_equipo = Column(Integer, ForeignKey("equipo.id"), nullable=False)
     posicion = Column(Integer, nullable=False)      # 1 o 2
+    puntaje = Column(Integer, default=0)
 
     usuario = relationship("Usuario", back_populates="predicciones_grupo")
     equipo = relationship("Equipo")
@@ -156,6 +157,19 @@ class PrediccionTerceros(Base):
     id_equipo = Column(Integer, ForeignKey("equipo.id"), nullable=False)
     clasificado_tercero = Column(Boolean, default=False)
     posicion = Column(Integer, nullable=True)
+    puntaje = Column(Integer, default=0)
 
     usuario = relationship("Usuario", back_populates="predicciones_terceros")
+    equipo = relationship("Equipo")
+
+# ─────────────────────────────────────────────
+# TERCEROS REALES (Resultados oficiales)
+# ─────────────────────────────────────────────
+class TercerosClasificados(Base):
+    __tablename__ = "terceros_clasificados"
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_equipo = Column(Integer, ForeignKey("equipo.id"), nullable=False)
+    posicion = Column(Integer, nullable=True) # 1-8
+
     equipo = relationship("Equipo")

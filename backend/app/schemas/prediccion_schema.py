@@ -20,6 +20,7 @@ class PrediccionGrupoResponse(BaseModel):
     id_usuario: int
     id_equipo: int
     posicion: int
+    puntaje: int
 
     model_config = {"from_attributes": True}
 

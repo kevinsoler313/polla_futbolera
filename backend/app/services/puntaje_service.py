@@ -1,5 +1,6 @@
+from typing import  List
 from sqlalchemy.orm import Session
-from app.models.models import Partido, PrediccionPartido, Usuario, PrediccionGrupo, GrupoPosiciones
+from app.models.models import Partido, PrediccionPartido, Usuario, PrediccionGrupo, GrupoPosiciones, TercerosClasificados, PrediccionTerceros
 
 PUNTOS_FASE = {
     "grupos": {"pge": 1, "marcador": 2, "clasificado": 0},
@@ -39,7 +40,7 @@ def procesar_resultado_partido(db: Session, partido: Partido):
         # Por simplicidad, asumimos que si pred.puntaje > 0, ya se calculó y debemos restarlo
         # del usuario.
         usuario = db.query(Usuario).filter(Usuario.id == pred.id_usuario).first()
-        if not usuario:
+        if not usuario or usuario.es_admin:
             continue
 
         # Si ya se había puntuado, restamos para recalcular (idempotencia básica)
@@ -86,7 +87,7 @@ def procesar_clasificados_llave(db: Session, partido: Partido):
 
     for pred in predicciones:
         usuario = db.query(Usuario).filter(Usuario.id == pred.id_usuario).first()
-        if not usuario:
+        if not usuario or usuario.es_admin:
             continue
 
         puntos_ganados = 0
@@ -141,13 +142,58 @@ def procesar_clasificados_grupo(db: Session, id_grupo: int, id_equipo_1ro: int, 
     
     for pred in pred_grupo:
         usuario = db.query(Usuario).filter(Usuario.id == pred.id_usuario).first()
-        if not usuario:
+        if not usuario or usuario.es_admin:
             continue
         
+        # Idempotencia: Restar puntos previos si existen para recalcular
+        if pred.puntaje > 0:
+            usuario.puntaje -= pred.puntaje
+            pred.puntaje = 0
+
         # Validar si atinó a la posición exacta
+        puntos_ganados = 0
         if pred.id_equipo == id_equipo_1ro and pred.posicion == 1:
-            usuario.puntaje += pts_grupo
+            puntos_ganados = pts_grupo
         elif pred.id_equipo == id_equipo_2do and pred.posicion == 2:
-            usuario.puntaje += pts_grupo
+            puntos_ganados = pts_grupo
+        
+        if puntos_ganados > 0:
+            pred.puntaje = puntos_ganados
+            usuario.puntaje += puntos_ganados
             
+    db.commit()
+
+
+def procesar_mejores_terceros(db: Session, equipos_ids: List[int]):
+    """
+    Asigna puntos a los usuarios que acertaron los mejores terceros.
+    equipos_ids: lista de los 8 IDs de equipos que realmente pasaron.
+    """
+    # 1. Limpiar y Guardar resultados reales
+    db.query(TercerosClasificados).delete()
+    for idx, eq_id in enumerate(equipos_ids):
+        nuevo = TercerosClasificados(id_equipo=eq_id, posicion=idx+1)
+        db.add(nuevo)
+    db.commit()
+
+    pts_tercero = 3 # Puntos por cada acierto
+
+    # 2. Procesar puntos para usuarios
+    predicciones = db.query(PrediccionTerceros).filter(PrediccionTerceros.clasificado_tercero == True).all()
+    
+    for pred in predicciones:
+        usuario = db.query(Usuario).filter(Usuario.id == pred.id_usuario).first()
+        if not usuario or usuario.es_admin:
+            continue
+
+        # Idempotencia: Restar puntos previos si existen
+        if pred.puntaje > 0:
+            usuario.puntaje -= pred.puntaje
+            pred.puntaje = 0
+
+        # Validar si el equipo elegido está en la lista real de clasificados
+        if pred.id_equipo in equipos_ids:
+            pred.puntaje = pts_tercero
+            usuario.puntaje += pts_tercero
+
     db.commit()
