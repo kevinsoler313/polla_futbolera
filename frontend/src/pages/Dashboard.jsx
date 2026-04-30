@@ -1,120 +1,170 @@
 import { useState, useEffect } from 'react';
 import { mundialService, prediccionService } from '../services/api';
+import Bracket from './Bracket';
 import './Dashboard.css';
 
+// ── Helpers puros ────────────────────────────────────────────────────────────
 
+const buildGroupTable = (equipos, partidos, predicciones) => {
+  const stats = equipos.reduce((acc, eq) => {
+    acc[eq.id] = { ...eq, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0, pts: 0 };
+    return acc;
+  }, {});
+
+  partidos.forEach(match => {
+    const pred = predicciones.find(p => p.id_partido === match.id);
+    if (pred) {
+      const g1 = pred.goles_equipo1;
+      const g2 = pred.goles_equipo2;
+      const e1 = match.id_equipo1;
+      const e2 = match.id_equipo2;
+
+      if (stats[e1] && stats[e2]) {
+        stats[e1].pj += 1;
+        stats[e2].pj += 1;
+        stats[e1].gf += g1;
+        stats[e1].gc += g2;
+        stats[e2].gf += g2;
+        stats[e2].gc += g1;
+        stats[e1].dg = stats[e1].gf - stats[e1].gc;
+        stats[e2].dg = stats[e2].gf - stats[e2].gc;
+
+        if (g1 > g2) {
+          stats[e1].pg += 1;
+          stats[e1].pts += 3;
+          stats[e2].pp += 1;
+        } else if (g1 < g2) {
+          stats[e2].pg += 1;
+          stats[e2].pts += 3;
+          stats[e1].pp += 1;
+        } else {
+          stats[e1].pe += 1;
+          stats[e1].pts += 1;
+          stats[e2].pe += 1;
+          stats[e2].pts += 1;
+        }
+      }
+    }
+  });
+
+  return Object.values(stats).sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.dg !== a.dg) return b.dg - a.dg;
+    return b.gf - a.gf;
+  });
+};
+
+const sortEquiposByPrediction = (equipos, predicciones) => {
+  const preds = predicciones.filter(p => equipos.some(e => e.id === p.id_equipo));
+  if (preds.length === 0) return equipos;
+
+  return [...equipos].sort((a, b) => {
+    const posA = preds.find(p => p.id_equipo === a.id)?.posicion || 99;
+    const posB = preds.find(p => p.id_equipo === b.id)?.posicion || 99;
+    return posA - posB;
+  });
+};
+
+const buildThirdPlacesFromTable = (grupos, predicciones) => {
+  const terceros = grupos.map(g => {
+    const table = buildGroupTable(g.equipos, g.partidos, predicciones);
+    return table[2] ? { ...table[2], grupo: g.nombre } : null;
+  }).filter(t => t !== undefined && t !== null);
+
+  return terceros.sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.dg !== a.dg) return b.dg - a.dg;
+    return b.gf - a.gf;
+  });
+};
+
+const buildThirdPlacesFromPositions = (grupos, predicciones) => {
+  return grupos.map(g => {
+    const equiposOrdenados = sortEquiposByPrediction(g.equipos, predicciones);
+    const equipoTercero = equiposOrdenados[2];
+    return equipoTercero ? { ...equipoTercero, grupo: g.nombre, pts: 0, dg: 0, gf: 0 } : null;
+  }).filter(t => t !== undefined && t !== null);
+};
+
+// ── Componente ───────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
+  // ── Estado ───────────────────────────────────────────────────────────────
   const [grupos, setGrupos] = useState([]);
-  const [misPredicciones, setMisPredicciones] = useState([]);
-  const [misPrediccionesPartidos, setMisPrediccionesPartidos] = useState([]);
-  const [allEquipos, setAllEquipos] = useState([]);
+  const [prediccionesGrupo, setPrediccionesGrupo] = useState([]);
+  const [prediccionesPartidos, setPrediccionesPartidos] = useState([]);
+  const [partidosEliminatoria, setPartidosEliminatoria] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState({ text: '', type: '' });
-  const [view, setView] = useState('clasificados'); // 'clasificados', 'partidos', 'tablas'
+  const [view, setView] = useState('clasificados'); // 'clasificados' | 'partidos' | 'tablas' | 'bracket'
+  const [grupoActivo, setGrupoActivo] = useState(0);
 
-  // Cargar datos
+  // Drag & Drop
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverItem, setDragOverItem] = useState(null);
+  const [draggedTercero, setDraggedTercero] = useState(null);
+  const [dragOverTercero, setDragOverTercero] = useState(null);
+  const [tercerosManual, setTercerosManual] = useState([]);
+  
+  // Bracket State (Lifted)
+  const [bracketScores, setBracketScores] = useState({});
+  const [bracketTieBreakers, setBracketTieBreakers] = useState({});
+
+  // ── Cargar datos ─────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataGrupos, dataPredicciones, dataPredPartidos, dataEquipos] = await Promise.all([
+        const [dataGrupos, dataPredGrupos, dataPredPartidos] = await Promise.all([
           mundialService.grupos(),
           prediccionService.misGrupos(),
           prediccionService.misPartidos(),
-          mundialService.equipos()
         ]);
         setGrupos(dataGrupos);
-        setMisPredicciones(dataPredicciones);
-        setMisPrediccionesPartidos(dataPredPartidos);
-        setAllEquipos(dataEquipos);
+        setPrediccionesGrupo(dataPredGrupos);
+        setPrediccionesPartidos(dataPredPartidos);
       } catch (error) {
-        console.error("Error cargando datos:", error);
+        console.error('Error cargando datos:', error);
       } finally {
         setLoading(false);
       }
     };
+
+    const fetchEliminatoria = async () => {
+      try {
+        const data = await mundialService.partidosEliminatoria();
+        setPartidosEliminatoria(data);
+      } catch (error) {
+        console.error('Error cargando eliminatoria:', error);
+      }
+    };
+
     fetchData();
+    fetchEliminatoria();
   }, []);
 
-  const [draggedItem, setDraggedItem] = useState(null);
-  const [dragOverItem, setDragOverItem] = useState(null);
+  // ── Sincronizar terceros para vista Clasificados ──────────────────────────
+  useEffect(() => {
+    if (grupos.length === 0 || prediccionesGrupo.length === 0) return;
 
-  const getEquiposOrdenados = (grupoId, equipos) => {
-    const preds = misPredicciones.filter(p => equipos.some(e => e.id === p.id_equipo));
-    if (preds.length === 0) return equipos;
-
-    return [...equipos].sort((a, b) => {
-      const posA = preds.find(p => p.id_equipo === a.id)?.posicion || 99;
-      const posB = preds.find(p => p.id_equipo === b.id)?.posicion || 99;
-      return posA - posB;
-    });
-  };
-
-  const calculateGroupTable = (grupoId, equipos) => {
-    const stats = equipos.reduce((acc, eq) => {
-      acc[eq.id] = { ...eq, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0, pts: 0 };
-      return acc;
-    }, {});
-
-    const grupoMatches = grupos.find(g => g.id === grupoId)?.partidos || [];
+    const desdePosiciones = buildThirdPlacesFromPositions(grupos, prediccionesGrupo);
     
-    grupoMatches.forEach(match => {
-      const pred = misPrediccionesPartidos.find(p => p.id_partido === match.id);
-      if (pred) {
-        const g1 = pred.goles_equipo1;
-        const g2 = pred.goles_equipo2;
-        const e1 = match.id_equipo1;
-        const e2 = match.id_equipo2;
-
-        if (stats[e1] && stats[e2]) {
-          stats[e1].pj += 1;
-          stats[e2].pj += 1;
-          stats[e1].gf += g1;
-          stats[e1].gc += g2;
-          stats[e2].gf += g2;
-          stats[e2].gc += g1;
-          stats[e1].dg = stats[e1].gf - stats[e1].gc;
-          stats[e2].dg = stats[e2].gf - stats[e2].gc;
-
-          if (g1 > g2) {
-            stats[e1].pg += 1;
-            stats[e1].pts += 3;
-            stats[e2].pp += 1;
-          } else if (g1 < g2) {
-            stats[e2].pg += 1;
-            stats[e2].pts += 3;
-            stats[e1].pp += 1;
-          } else {
-            stats[e1].pe += 1;
-            stats[e1].pts += 1;
-            stats[e2].pe += 1;
-            stats[e2].pts += 1;
-          }
+    setTercerosManual(prev => {
+      if (prev.length === 0) return desdePosiciones;
+      
+      // Intentar mantener el orden manual pero actualizar datos si cambiaron los equipos
+      return desdePosiciones.map(nt => {
+        const existente = prev.find(p => p.grupo === nt.grupo);
+        if (existente) {
+          return { ...nt, __orderIndex: prev.indexOf(existente) };
         }
-      }
+        return { ...nt, __orderIndex: prev.length };
+      }).sort((a, b) => a.__orderIndex - b.__orderIndex)
+        .map(({ __orderIndex, ...t }) => t);
     });
+  }, [grupos, prediccionesGrupo]);
 
-    return Object.values(stats).sort((a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.dg !== a.dg) return b.dg - a.dg;
-      return b.gf - a.gf;
-    });
-  };
-
-  const getMejoresTerceros = () => {
-    const terceros = grupos.map(g => {
-      const table = calculateGroupTable(g.id, g.equipos);
-      return { ...table[2], grupo: g.nombre }; // Index 2 is 3rd place
-    }).filter(t => t !== undefined);
-
-    return terceros.sort((a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.dg !== a.dg) return b.dg - a.dg;
-      return b.gf - a.gf;
-    });
-  };
-
+  // ── Drag & Drop: Grupos ──────────────────────────────────────────────────
   const handleDragStart = (e, grupoId, equipoId) => {
     setDraggedItem({ grupoId, equipoId });
     e.dataTransfer.effectAllowed = 'move';
@@ -136,14 +186,14 @@ const Dashboard = () => {
   const handleDrop = (e, grupoId, targetEquipoId) => {
     e.preventDefault();
     setDragOverItem(null);
-    
+
     if (!draggedItem || draggedItem.grupoId !== grupoId || draggedItem.equipoId === targetEquipoId) {
       return;
     }
 
     const equiposDelGrupo = grupos.find(g => g.id === grupoId).equipos;
-    const ordenActual = getEquiposOrdenados(grupoId, equiposDelGrupo);
-    
+    const ordenActual = sortEquiposByPrediction(equiposDelGrupo, prediccionesGrupo);
+
     const draggedIndex = ordenActual.findIndex(e => e.id === draggedItem.equipoId);
     const targetIndex = ordenActual.findIndex(e => e.id === targetEquipoId);
 
@@ -151,53 +201,140 @@ const Dashboard = () => {
     const [removed] = nuevoOrden.splice(draggedIndex, 1);
     nuevoOrden.splice(targetIndex, 0, removed);
 
-    const nuevasPredsDelGrupo = nuevoOrden.map((equipo, index) => ({
+    const nuevasPreds = nuevoOrden.map((equipo, index) => ({
       id_equipo: equipo.id,
-      posicion: index + 1
+      posicion: index + 1,
     }));
 
-    setMisPredicciones(prev => {
-      const otrasPreds = prev.filter(p => !equiposDelGrupo.some(e => e.id === p.id_equipo));
-      return [...otrasPreds, ...nuevasPredsDelGrupo];
+    setPrediccionesGrupo(prev => {
+      const otras = prev.filter(p => !equiposDelGrupo.some(e => e.id === p.id_equipo));
+      return [...otras, ...nuevasPreds];
     });
-    
+
     setDraggedItem(null);
   };
 
+  // ── Drag & Drop: Terceros ────────────────────────────────────────────────
+  const handleTerceroDragStart = (e, index) => {
+    setDraggedTercero(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index);
+  };
+
+  const handleTerceroDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverTercero !== index) {
+      setDragOverTercero(index);
+    }
+  };
+
+  const handleTerceroDragLeave = () => {
+    setDragOverTercero(null);
+  };
+
+  const handleTerceroDrop = (e, targetIndex) => {
+    e.preventDefault();
+    setDragOverTercero(null);
+
+    if (draggedTercero === null || draggedTercero === targetIndex) {
+      return;
+    }
+
+    setTercerosManual(prev => {
+      const nuevoOrden = [...prev];
+      const [removed] = nuevoOrden.splice(draggedTercero, 1);
+      nuevoOrden.splice(targetIndex, 0, removed);
+      return nuevoOrden;
+    });
+
+    setDraggedTercero(null);
+  };
+
+  // ── Marcadores ───────────────────────────────────────────────────────────
   const handleScoreChange = (partidoId, equipo, valor) => {
-    setMisPrediccionesPartidos(prev => {
+    setPrediccionesPartidos(prev => {
       const existe = prev.find(p => p.id_partido === partidoId);
-      
       if (existe) {
-        return prev.map(p => 
-          p.id_partido === partidoId 
-            ? { ...p, [equipo === 1 ? 'goles_equipo1' : 'goles_equipo2']: parseInt(valor) || 0 } 
+        return prev.map(p =>
+          p.id_partido === partidoId
+            ? { ...p, [equipo === 1 ? 'goles_equipo1' : 'goles_equipo2']: parseInt(valor) || 0 }
             : p
         );
-      } else {
-        return [...prev, { 
-          id_partido: partidoId, 
-          goles_equipo1: equipo === 1 ? (parseInt(valor) || 0) : 0, 
-          goles_equipo2: equipo === 2 ? (parseInt(valor) || 0) : 0,
-          fase: 'grupos'
-        }];
       }
+      return [...prev, {
+        id_partido: partidoId,
+        goles_equipo1: equipo === 1 ? (parseInt(valor) || 0) : 0,
+        goles_equipo2: equipo === 2 ? (parseInt(valor) || 0) : 0,
+        fase: 'grupos',
+      }];
     });
   };
 
+  const handleBracketScoreChange = (matchId, team, value) => {
+    const numValue = value === '' ? '' : parseInt(value);
+    setBracketScores(prev => {
+      const newScores = { ...prev };
+      if (!newScores[matchId]) newScores[matchId] = { g1: 0, g2: 0 };
+      newScores[matchId][team === 1 ? 'g1' : 'g2'] = numValue;
+      
+      // Limpiar tie-breaker si deja de ser empate
+      if (newScores[matchId].g1 !== newScores[matchId].g2) {
+        setBracketTieBreakers(prevTB => {
+          const newTB = { ...prevTB };
+          delete newTB[matchId];
+          return newTB;
+        });
+      }
+      return newScores;
+    });
+  };
+
+  const handleBracketTieBreaker = (matchId, winnerId) => {
+    setBracketTieBreakers(prev => ({ ...prev, [matchId]: winnerId }));
+  };
+
+  const handleResetBracket = () => {
+    if (window.confirm('¿Estás seguro de que quieres reiniciar todo el bracket? Se borrarán todos los marcadores y desempates.')) {
+      setBracketScores({});
+      setBracketTieBreakers({});
+    }
+  };
+
+  const handleResetPartidos = () => {
+    if (window.confirm('¿Estás seguro de que quieres reiniciar todos los marcadores de la fase de grupos?')) {
+      setPrediccionesPartidos(prev => prev.map(p => ({ ...p, goles_equipo1: 0, goles_equipo2: 0 })));
+    }
+  };
+
+  // ── Guardar ──────────────────────────────────────────────────────────────
   const guardarApuestas = async () => {
     setSaving(true);
     setMensaje({ text: '', type: '' });
-    
+
     try {
-      if (view === 'clasificados') {
-        await prediccionService.guardarGrupos(misPredicciones);
-      } else {
-        // Filtrar solo las predicciones del grupo actual para no enviar todo si se desea, 
-        // pero el servicio espera una lista. Enviamos todas las actuales.
-        await prediccionService.guardarPartidos(misPrediccionesPartidos);
+      const promesas = [];
+
+      // 1. Guardar Clasificados (Grupos)
+      if (prediccionesGrupo.length > 0) {
+        promesas.push(prediccionService.guardarGrupos(prediccionesGrupo));
       }
-      setMensaje({ text: '¡Predicciones guardadas con éxito!', type: 'success' });
+
+      // 2. Guardar Marcadores de Grupos
+      if (prediccionesPartidos.length > 0) {
+        promesas.push(prediccionService.guardarPartidos(prediccionesPartidos));
+      }
+
+      // 3. Guardar Bracket
+      // Si el componente Bracket está montado, habrá registrado su función de despacho
+      if (typeof window.dispatchBracketSave === 'function') {
+        promesas.push(window.dispatchBracketSave());
+      }
+
+      // Ejecutar todas las promesas en paralelo
+      await Promise.all(promesas);
+
+      setMensaje({ text: '¡Todas tus predicciones han sido guardadas correctamente!', type: 'success' });
       setTimeout(() => setMensaje({ text: '', type: '' }), 3000);
     } catch (error) {
       setMensaje({ text: error.message || 'Error al guardar las predicciones', type: 'error' });
@@ -206,29 +343,14 @@ const Dashboard = () => {
     }
   };
 
-
-
-  const [grupoActivo, setGrupoActivo] = useState(0);
-
-  const getEquipoById = (id) => {
-    if (!id) return { nombre: 'TBD', bandera: '❓' };
-    const targetId = String(id);
-    const eq = allEquipos.find(e => String(e.id) === targetId);
-    if (eq) return eq;
-    
-    // Fallback si no está en allEquipos por alguna razón
-    for (const g of grupos) {
-      const found = g.equipos?.find(e => String(e.id) === targetId);
-      if (found) return found;
-    }
-    return { nombre: 'TBD', bandera: '❓' };
-  };
-
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
-
-
-  
-
+  // ── Render ───────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
@@ -239,30 +361,34 @@ const Dashboard = () => {
         </div>
         <div className="header-actions">
           <div className="view-selector">
-            <button 
+            <button
               className={`view-btn ${view === 'clasificados' ? 'active' : ''}`}
               onClick={() => setView('clasificados')}
             >
               🥈 Clasificados
             </button>
-            <button 
+            <button
               className={`view-btn ${view === 'partidos' ? 'active' : ''}`}
               onClick={() => setView('partidos')}
             >
               ⚽ Marcadores
             </button>
-            <button 
+            <button
               className={`view-btn ${view === 'tablas' ? 'active' : ''}`}
               onClick={() => setView('tablas')}
             >
               📊 Tablas
             </button>
-
+            <button
+              className={`view-btn ${view === 'bracket' ? 'active' : ''}`}
+              onClick={() => setView('bracket')}
+            >
+              🏟️ Bracket
+            </button>
           </div>
-          <div className="action-buttons" style={{ display: 'flex', gap: '0.5rem' }}>
-
-            <button 
-              className="btn-primary" 
+          <div className="action-buttons">
+            <button
+              className="btn-primary"
               onClick={guardarApuestas}
               disabled={saving}
             >
@@ -295,76 +421,128 @@ const Dashboard = () => {
       )}
 
       <div className="grupo-detalle-view">
+        {/* ── CLASIFICADOS ─────────────────────────────────────────────── */}
         {view === 'clasificados' && (
-          <div className="grupos-grid animate-fade-in">
-            {grupos.map((grupo) => (
-              <div key={grupo.id} className="grupo-card glass-panel">
-                <div className="grupo-title">
-                  <h3>Grupo {grupo.nombre}</h3>
-                  <span className="selecciones-badge">
-                    {misPredicciones.filter(p => 
-                      grupo.equipos.some(e => e.id === p.id_equipo)
-                    ).length}/4
-                  </span>
-                </div>
-                
-                <ul className="equipos-list">
-                  {getEquiposOrdenados(grupo.id, grupo.equipos).map((equipo, index) => {
-                    const posicion = index + 1;
-                    const isDragOver = dragOverItem?.equipoId === equipo.id;
-                    
+          <div className="tablas-simuladas-container animate-fade-in">
+            <h2 className="section-title" style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              🏆 Ordena los Clasificados de Cada Grupo
+            </h2>
+
+            <div className="tablas-main-layout">
+              <div className="tablas-grupos-grid">
+                {grupos.map(grupo => {
+                  const equiposOrdenados = sortEquiposByPrediction(grupo.equipos, prediccionesGrupo);
+                  return (
+                    <div key={grupo.id} className="tablas-grupo-card">
+                      <div className="tablas-grupo-header">Grupo {grupo.nombre}</div>
+                      <div className="tablas-col-header">
+                        <span></span>
+                        <span>Equipo</span>
+                        <span>Pos</span>
+                        <span></span>
+                      </div>
+                      {equiposOrdenados.map((equipo, idx) => {
+                        const posicion = idx + 1;
+                        const isDragOver = dragOverItem?.equipoId === equipo.id && dragOverItem?.grupoId === grupo.id;
+                        const rowClass = posicion <= 2 ? 'clasificado' : posicion === 3 ? 'tercero' : 'eliminado';
+                        return (
+                          <div
+                            key={equipo.id}
+                            className={`tablas-fila tablas-fila--${rowClass} fila-draggable ${isDragOver ? 'drag-over' : ''}`}
+                            draggable
+                            onDragStart={e => handleDragStart(e, grupo.id, equipo.id)}
+                            onDragOver={e => handleDragOver(e, grupo.id, equipo.id)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={e => handleDrop(e, grupo.id, equipo.id)}
+                          >
+                            <span className="tablas-pos">{posicion}°</span>
+                            <span className="tablas-equipo">
+                              <span className="tablas-bandera">{equipo.bandera}</span>
+                              <span className="tablas-nombre">{equipo.nombre}</span>
+                            </span>
+                            <span className="tablas-pts">{posicion}°</span>
+                            <span className="drag-handle-small">⠿</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="tablas-sidebar">
+                <div className="tablas-grupo-card mejores-terceros-card">
+                  <div className="tablas-grupo-header">🏆 Mejores Terceros (arrastra para reordenar)</div>
+                  <div className="tablas-col-header">
+                    <span>Pos</span>
+                    <span>Equipo (G)</span>
+                    <span>Pts</span>
+                    <span></span>
+                  </div>
+                  {tercerosManual.map((eq, idx) => {
+                    const posicion = idx + 1;
+                    const isDragOver = dragOverTercero === idx;
+                    const rowClass = posicion <= 8 ? 'clasificado' : 'eliminado';
                     return (
-                      <li 
-                        key={equipo.id} 
-                        className={`equipo-item pos-${posicion} ${isDragOver ? 'drag-over' : ''}`}
+                      <div
+                        key={`${eq.id}-${idx}`}
+                        className={`tablas-fila tablas-fila--${rowClass} fila-draggable ${isDragOver ? 'drag-over' : ''}`}
                         draggable
-                        onDragStart={(e) => handleDragStart(e, grupo.id, equipo.id)}
-                        onDragOver={(e) => handleDragOver(e, grupo.id, equipo.id)}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, grupo.id, equipo.id)}
+                        onDragStart={e => handleTerceroDragStart(e, idx)}
+                        onDragOver={e => handleTerceroDragOver(e, idx)}
+                        onDragLeave={handleTerceroDragLeave}
+                        onDrop={e => handleTerceroDrop(e, idx)}
                       >
-                        <div className="posicion-numero">{posicion}°</div>
-                        <div className="equipo-info" style={{ flex: 1, marginLeft: '1rem' }}>
-                          <span className="equipo-bandera">{equipo.bandera}</span>
-                          <span className="equipo-nombre">{equipo.nombre}</span>
-                        </div>
-                        
-                        <div className="drag-handle">≡</div>
-                      </li>
+                        <span className="tablas-pos">{posicion}°</span>
+                        <span className="tablas-equipo">
+                          <span className="tablas-bandera">{eq.bandera}</span>
+                          <span className="tablas-nombre">{eq.nombre} <small>({eq.grupo})</small></span>
+                        </span>
+                        <span className="tablas-pts">{eq.pts}</span>
+                        <span className="drag-handle-small">⠿</span>
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               </div>
-            ))}
+            </div>
           </div>
         )}
 
+        {/* ── PARTIDOS / MARCADORES ────────────────────────────────────── */}
         {grupos[grupoActivo] && view === 'partidos' && (
           <div className="partidos-list animate-fade-in">
-            <h3 className="section-title">Marcadores Grupo {grupos[grupoActivo].nombre}</h3>
+            <div className="section-header-flex">
+              <h3 className="section-title">Marcadores Grupo {grupos[grupoActivo].nombre}</h3>
+              <button 
+                className="btn-secondary btn-sm"
+                onClick={handleResetPartidos}
+              >
+                🔄 Reiniciar Marcadores
+              </button>
+            </div>
             {grupos[grupoActivo].partidos.map(partido => {
-              const pred = misPrediccionesPartidos.find(p => p.id_partido === partido.id) || { goles_equipo1: 0, goles_equipo2: 0 };
-              
+              const pred = prediccionesPartidos.find(p => p.id_partido === partido.id) || { goles_equipo1: 0, goles_equipo2: 0 };
               return (
-                <div key={partido.id} className="partido-card glass-panel">
+                <div key={partido.id} className="partido-card">
                   <div className="partido-equipo home">
                     <span className="equipo-nombre-mini">{partido.equipo1.nombre}</span>
                     <span className="equipo-bandera-mini">{partido.equipo1.bandera}</span>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       min="0"
                       value={pred.goles_equipo1}
-                      onChange={(e) => handleScoreChange(partido.id, 1, e.target.value)}
+                      onChange={e => handleScoreChange(partido.id, 1, e.target.value)}
                       className="score-input"
                     />
                   </div>
                   <div className="partido-vs">VS</div>
                   <div className="partido-equipo away">
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       min="0"
                       value={pred.goles_equipo2}
-                      onChange={(e) => handleScoreChange(partido.id, 2, e.target.value)}
+                      onChange={e => handleScoreChange(partido.id, 2, e.target.value)}
                       className="score-input"
                     />
                     <span className="equipo-bandera-mini">{partido.equipo2.bandera}</span>
@@ -376,16 +554,17 @@ const Dashboard = () => {
           </div>
         )}
 
+        {/* ── TABLAS ───────────────────────────────────────────────────── */}
         {view === 'tablas' && (
           <div className="tablas-simuladas-container animate-fade-in">
             <h2 className="section-title" style={{ textAlign: 'center', marginBottom: '2rem' }}>
               📊 Pronóstico de Tablas y Mejores Terceros
             </h2>
-            
+
             <div className="tablas-main-layout">
               <div className="tablas-grupos-grid">
-                {grupos.map((grupo) => {
-                  const tableData = calculateGroupTable(grupo.id, grupo.equipos);
+                {grupos.map(grupo => {
+                  const tableData = buildGroupTable(grupo.equipos, grupo.partidos, prediccionesPartidos);
                   return (
                     <div key={grupo.id} className="tablas-grupo-card">
                       <div className="tablas-grupo-header">Grupo {grupo.nombre}</div>
@@ -419,18 +598,21 @@ const Dashboard = () => {
 
               <div className="tablas-sidebar">
                 <div className="tablas-grupo-card mejores-terceros-card">
-                  <div className="tablas-grupo-header">🏆 Mejores Terceros</div>
+                  <div className="tablas-grupo-header">🏆 Mejores Terceros (Calculados por Puntos)</div>
                   <div className="tablas-col-header">
                     <span>Pos</span>
                     <span>Equipo (G)</span>
                     <span>Pts</span>
                     <span>DG</span>
                   </div>
-                  {getMejoresTerceros().map((eq, idx) => {
+                  {buildThirdPlacesFromTable(grupos, prediccionesPartidos).map((eq, idx) => {
                     const posicion = idx + 1;
                     const rowClass = posicion <= 8 ? 'clasificado' : 'eliminado';
                     return (
-                      <div key={eq.id} className={`tablas-fila tablas-fila--${rowClass}`}>
+                      <div
+                        key={`tablas-3ro-${eq.id}-${idx}`}
+                        className={`tablas-fila tablas-fila--${rowClass}`}
+                      >
                         <span className="tablas-pos">{posicion}°</span>
                         <span className="tablas-equipo">
                           <span className="tablas-bandera">{eq.bandera}</span>
@@ -447,6 +629,24 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {view === 'bracket' && (
+          <Bracket
+            grupos={grupos}
+            prediccionesPartidos={prediccionesPartidos}
+            prediccionesGrupo={prediccionesGrupo}
+            partidosEliminatoria={partidosEliminatoria}
+            scores={bracketScores}
+            tieBreakers={bracketTieBreakers}
+            onScoreChange={handleBracketScoreChange}
+            onTieBreakerChange={handleBracketTieBreaker}
+            onReset={handleResetBracket}
+            tercerosManual={tercerosManual}
+            onSave={async (winners) => {
+              await prediccionService.guardarBracket(winners);
+            }}
+          />
         )}
       </div>
     </div>

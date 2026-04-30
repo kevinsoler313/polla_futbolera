@@ -10,7 +10,8 @@ from app.database import get_db
 from app.models.models import Usuario, Partido, PrediccionPartido, PrediccionGrupo, Equipo, Grupo
 from app.schemas.prediccion_schema import (
     PrediccionPartidoCreate, PrediccionPartidoResponse,
-    PrediccionGrupoCreate, PrediccionGrupoResponse
+    PrediccionGrupoCreate, PrediccionGrupoResponse,
+    BracketCreate
 )
 from app.controllers.security import get_current_user
 
@@ -339,3 +340,71 @@ def generar_llaves(
     db.commit()
 
     return {"message": "Cuadro de torneo generado con éxito", "llaves": llaves_generadas}
+
+
+# ── Guardar predicciones de bracket (eliminatorias) ─────────────────────────
+@router.post("/bracket", status_code=200)
+def guardar_bracket(
+    datos: BracketCreate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """Guarda las predicciones de ganadores en la fase eliminatoria."""
+    winners = datos.winners
+    saved = []
+
+    for match_id, equipo_ganador_id in winners.items():
+        partido = db.query(Partido).filter(Partido.id == match_id).first()
+        if not partido:
+            continue
+
+        equipo1 = db.query(Equipo).filter(Equipo.id == partido.id_equipo1).first()
+        equipo2 = db.query(Equipo).filter(Equipo.id == partido.id_equipo2).first()
+
+        if not equipo1 or not equipo2:
+            continue
+
+        goles_ganador = 1
+        goles_perdedor = 0
+
+        if equipo_ganador_id == partido.id_equipo1:
+            goles_eq1 = goles_ganador
+            goles_eq2 = goles_perdedor
+        else:
+            goles_eq1 = goles_perdedor
+            goles_eq2 = goles_ganador
+
+        pred = db.query(PrediccionPartido).filter(
+            PrediccionPartido.id_usuario == usuario.id,
+            PrediccionPartido.id_partido == partido.id
+        ).first()
+
+        if pred:
+            pred.goles_equipo1 = goles_eq1
+            pred.goles_equipo2 = goles_eq2
+        else:
+            pred = PrediccionPartido(
+                id_usuario=usuario.id,
+                id_partido=partido.id,
+                goles_equipo1=goles_eq1,
+                goles_equipo2=goles_eq2,
+                fase=partido.fase,
+                id_equipo1=partido.id_equipo1,
+                id_equipo2=partido.id_equipo2,
+                puntaje=0,
+                acerto=False
+            )
+            db.add(pred)
+
+        db.flush()
+        saved.append({
+            "id_partido": partido.id,
+            "id_equipo1": partido.id_equipo1,
+            "id_equipo2": partido.id_equipo2,
+            "ganador": equipo_ganador_id,
+            "fase": partido.fase,
+        })
+
+    db.commit()
+
+    return {"message": "Bracket guardado con éxito", "saved": len(saved)}

@@ -47,3 +47,13 @@ class PrediccionPartidoResponse(BaseModel):
     fase: str
 
     model_config = {"from_attributes": True}
+
+
+# ── Predicción de bracket (eliminatorias) ─────────────────────────────────────
+class BracketWinnerItem(BaseModel):
+    id_partido: int
+    id_equipo_ganador: int
+
+
+class BracketCreate(BaseModel):
+    winners: dict  # { "r16a1": equipo_id, "r8a1": equipo_id, ... }

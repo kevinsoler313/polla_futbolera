@@ -15,8 +15,8 @@ const handleResponse = async (res) => {
   let data = {};
   try {
     data = await res.json();
-  } catch (err) {
-    // Si la respuesta no es JSON, capturamos el error silenciosamente
+  } catch {
+    // Si la respuesta no es JSON, continuar silenciosamente
   }
 
   if (!res.ok) {
@@ -25,7 +25,6 @@ const handleResponse = async (res) => {
       if (typeof data.detail === "string") {
         errorMessage = data.detail;
       } else if (Array.isArray(data.detail)) {
-        // Para errores de validación de Pydantic (422)
         errorMessage = data.detail.map((err) => err.msg).join(", ");
       }
     }
@@ -59,13 +58,8 @@ export const mundialService = {
   grupos: () =>
     fetch(`${API_BASE}/mundial/grupos`, { headers: getHeaders() }).then(handleResponse),
 
-  equipos: () =>
-    fetch(`${API_BASE}/mundial/equipos`, { headers: getHeaders() }).then(handleResponse),
-
-  partidos: (fase) =>
-    fetch(`${API_BASE}/mundial/partidos${fase ? `?fase=${fase}` : ""}`, {
-      headers: getHeaders(),
-    }).then(handleResponse),
+  partidosEliminatoria: () =>
+    fetch(`${API_BASE}/mundial/partidos/eliminatoria`, { headers: getHeaders() }).then(handleResponse),
 };
 
 // ── Predicciones ────────────────────────────────────────────────────────────
@@ -94,10 +88,10 @@ export const prediccionService = {
       headers: getHeaders(),
     }).then(handleResponse),
 
-};
-
-// ── Usuarios (ranking) ──────────────────────────────────────────────────────
-export const usuarioService = {
-  ranking: () =>
-    fetch(`${API_BASE}/usuarios/ranking`).then(handleResponse),
+  guardarBracket: (winners) =>
+    fetch(`${API_BASE}/predicciones/bracket`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ winners }),
+    }).then(handleResponse),
 };

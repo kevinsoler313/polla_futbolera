@@ -1,7 +1,7 @@
 /**
  * Navbar - Barra de navegación principal
  */
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./Navbar.css";
 
@@ -16,17 +16,13 @@ const Navbar = () => {
 
   return (
     <nav className="navbar">
-      <Link to="/" className="navbar-brand">
+      <div className="navbar-brand">
         <span className="trophy">🏆</span>
         <span className="brand-text">Polla <span className="brand-highlight">Mundial</span> 2026</span>
-      </Link>
+      </div>
 
       {usuario && (
         <div className="navbar-menu">
-          <Link to="/dashboard" className="nav-link">Dashboard</Link>
-          <Link to="/apuestas" className="nav-link">Mis Apuestas</Link>
-          <Link to="/ranking" className="nav-link">Ranking</Link>
-
           <div className="nav-user">
             <div className="user-avatar">
               {usuario.nombre_usuario.charAt(0).toUpperCase()}

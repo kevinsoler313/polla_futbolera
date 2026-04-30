@@ -65,3 +65,9 @@ def listar_partidos(fase: Optional[str] = None, id_grupo: Optional[int] = None, 
     if id_grupo:
         query = query.filter(Partido.id_grupo == id_grupo)
     return query.all()
+
+
+@router.get("/partidos/eliminatoria", response_model=List[PartidoResponse])
+def listar_partidos_eliminatoria(db: Session = Depends(get_db)):
+    """Lista todos los partidos de fase eliminatoria (excluye fase de grupos)."""
+    return db.query(Partido).filter(Partido.fase != "grupos").all()
