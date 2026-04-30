@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { adminService } from '../services/api';
 import './Bracket.css';
 
 // ── Constantes: definición fija de los cruces ────────────────────────────────
@@ -305,21 +306,13 @@ const Bracket = ({
     // No necesitamos limpiar un mapa manual de winners ya que se calcula al vuelo
   };
 
-  const handleSave = async () => {
+  const handleSave = async (asAdmin = false) => {
     setSaving(true);
     setMensaje({ text: '', type: '' });
     try {
-      const faseMap = {
-        'r16': '1/16',
-        'r8': '1/8',
-        'qf': '1/4',
-        'sf': 'semi',
-        'fn': 'final',
-      };
-
       const bracketPredictions = [];
+      const adminPromises = [];
       
-      // Recorrer todos los matches de la estructura para ver quién ganó
       for (const round of Object.values(BRACKET_STRUCTURE)) {
         for (const m of round) {
           const winner = getWinner(m.id);
@@ -336,7 +329,6 @@ const Bracket = ({
 
             const partidosFase = partidosEliminatoria.filter(p => p.fase === fase);
             let index = -1;
-            // (Lógica de index igual que antes...)
             if (fase === '1/16') {
               const zona = m.id.includes('a') ? 0 : 8;
               const numMatch = m.id.match(/\d+$/);
@@ -360,26 +352,38 @@ const Bracket = ({
             }
 
             if (index >= 0 && index < partidosFase.length) {
-              bracketPredictions.push({
-                id_partido: partidosFase[index].id,
-                id_equipo1: teams.equipo1.id,
-                id_equipo2: teams.equipo2.id,
-                goles_equipo1: matchScores.g1 === '' ? 0 : matchScores.g1,
-                goles_equipo2: matchScores.g2 === '' ? 0 : matchScores.g2,
-                ganador: winner.id
-              });
+              const matchId = partidosFase[index].id;
+              
+              if (asAdmin) {
+                // MODO ADMIN: Guardar Clasificados y Marcador
+                adminPromises.push(adminService.actualizarClasificadosLlave(matchId, teams.equipo1.id, teams.equipo2.id));
+                adminPromises.push(adminService.actualizarMarcadorPartido(matchId, matchScores.g1 === '' ? 0 : matchScores.g1, matchScores.g2 === '' ? 0 : matchScores.g2));
+              } else {
+                bracketPredictions.push({
+                  id_partido: matchId,
+                  id_equipo1: teams.equipo1.id,
+                  id_equipo2: teams.equipo2.id,
+                  goles_equipo1: matchScores.g1 === '' ? 0 : matchScores.g1,
+                  goles_equipo2: matchScores.g2 === '' ? 0 : matchScores.g2,
+                  ganador: winner.id
+                });
+              }
             }
           }
         }
       }
 
-      if (onSave) {
+      if (asAdmin) {
+        await Promise.all(adminPromises);
+      } else if (onSave) {
         await onSave(bracketPredictions);
       }
-      setMensaje({ text: '¡Bracket guardado con éxito!', type: 'success' });
+      
+      setMensaje({ text: asAdmin ? 'Resultados reales del bracket guardados!' : '¡Bracket guardado con éxito!', type: 'success' });
       setTimeout(() => setMensaje({ text: '', type: '' }), 3000);
     } catch (error) {
       setMensaje({ text: error.message || 'Error al guardar', type: 'error' });
+      throw error; // Propagar al dashboard
     } finally {
       setSaving(false);
     }

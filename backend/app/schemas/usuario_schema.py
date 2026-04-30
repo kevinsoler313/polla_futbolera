@@ -41,6 +41,8 @@ class UsuarioResponse(BaseModel):
     nombre_usuario: str
     correo: str
     puntaje: int
+    es_admin: bool
+    aciertos_exactos: int
 
     model_config = {"from_attributes": True}
 

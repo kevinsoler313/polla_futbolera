@@ -20,6 +20,8 @@ class Usuario(Base):
     contrasena = Column(String(255), nullable=False)          # hash bcrypt
     correo = Column(String(100), unique=True, nullable=False)
     puntaje = Column(Integer, default=0)
+    es_admin = Column(Boolean, default=False)
+    aciertos_exactos = Column(Integer, default=0)
 
     # Relaciones
     predicciones_partido = relationship("PrediccionPartido", back_populates="usuario")

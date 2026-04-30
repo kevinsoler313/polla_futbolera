@@ -61,6 +61,25 @@
 .user-name { color: #fff; font-size: 0.85rem; font-weight: 600; }
 .user-pts { color: #ffd700; font-size: 0.8rem; font-weight: 700; }
 
+.btn-admin {
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffd700;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 0.5rem;
+  background: rgba(255, 215, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.btn-admin:hover {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
+}
+
+
 .btn-logout {
   padding: 0.4rem 1rem;
   background: transparent;

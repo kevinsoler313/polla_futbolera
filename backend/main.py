@@ -45,11 +45,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.controllers import auth_controller, usuario_controller, prediccion_controller, mundial_controller, admin_controller
+
 # ── Routers ────────────────────────────────────────────────────────────────────
 app.include_router(auth_controller.router)
 app.include_router(usuario_controller.router)
 app.include_router(prediccion_controller.router)
 app.include_router(mundial_controller.router)
+app.include_router(admin_controller.router)
 
 
 @app.get("/", tags=["Root"])

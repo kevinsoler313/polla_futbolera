@@ -1,7 +1,7 @@
 /**
  * Navbar - Barra de navegación principal
  */
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./Navbar.css";
 
@@ -16,7 +16,7 @@ const Navbar = () => {
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand">
+      <div className="navbar-brand" onClick={() => navigate("/")} style={{ cursor: 'pointer' }}>
         <span className="trophy">🏆</span>
         <span className="brand-text">Polla <span className="brand-highlight">Mundial</span> 2026</span>
       </div>
@@ -24,6 +24,7 @@ const Navbar = () => {
       {usuario && (
         <div className="navbar-menu">
           <div className="nav-user">
+
             <div className="user-avatar">
               {usuario.nombre_usuario.charAt(0).toUpperCase()}
             </div>

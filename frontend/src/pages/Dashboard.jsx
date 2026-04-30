@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from "../context/AuthContext";
 import { mundialService, prediccionService } from '../services/api';
 import Bracket from './Bracket';
 import './Dashboard.css';
@@ -89,15 +90,18 @@ const buildThirdPlacesFromPositions = (grupos, predicciones) => {
 // ── Componente ───────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
+  const { usuario } = useAuth();
   // ── Estado ───────────────────────────────────────────────────────────────
+  const [isAdminMode, setIsAdminMode] = useState(usuario?.es_admin || false);
   const [grupos, setGrupos] = useState([]);
+
   const [prediccionesGrupo, setPrediccionesGrupo] = useState([]);
   const [prediccionesPartidos, setPrediccionesPartidos] = useState([]);
   const [partidosEliminatoria, setPartidosEliminatoria] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState({ text: '', type: '' });
-  const [view, setView] = useState('clasificados'); // 'clasificados' | 'partidos' | 'tablas' | 'bracket'
+  const [view, setView] = useState(usuario?.es_admin ? 'partidos' : 'clasificados'); // 'clasificados' | 'partidos' | 'tablas' | 'bracket'
   const [grupoActivo, setGrupoActivo] = useState(0);
 
   // Drag & Drop
@@ -106,7 +110,7 @@ const Dashboard = () => {
   const [draggedTercero, setDraggedTercero] = useState(null);
   const [dragOverTercero, setDragOverTercero] = useState(null);
   const [tercerosManual, setTercerosManual] = useState([]);
-  
+
   // Bracket State (Lifted)
   const [bracketScores, setBracketScores] = useState({});
   const [bracketTieBreakers, setBracketTieBreakers] = useState({});
@@ -123,9 +127,27 @@ const Dashboard = () => {
         ]);
         setGrupos(dataGrupos);
         setPrediccionesGrupo(dataPredGrupos);
-        setPrediccionesPartidos(dataPredPartidos);
-        
-        // Guardar la data de terceros temporalmente en el objeto window para usarla en el useEffect
+
+        if (isAdminMode) {
+          // Inicializar con resultados REALES de la DB para que el admin pueda editarlos
+          const realScores = [];
+          dataGrupos.forEach(g => {
+            g.partidos.forEach(p => {
+              if (p.goles_equipo1 !== null || p.goles_equipo2 !== null) {
+                realScores.push({
+                  id_partido: p.id,
+                  goles_equipo1: p.goles_equipo1 || 0,
+                  goles_equipo2: p.goles_equipo2 || 0,
+                  fase: 'grupos'
+                });
+              }
+            });
+          });
+          setPrediccionesPartidos(realScores);
+        } else {
+          setPrediccionesPartidos(dataPredPartidos);
+        }
+
         window.__savedTerceros = dataTerceros || [];
       } catch (error) {
         console.error('Error cargando datos:', error);
@@ -138,6 +160,22 @@ const Dashboard = () => {
       try {
         const data = await mundialService.partidosEliminatoria();
         setPartidosEliminatoria(data);
+
+        if (isAdminMode) {
+          // Agregar resultados reales de eliminatorias a prediccionesPartidos (para que el bracket los vea)
+          setPrediccionesPartidos(prev => {
+            const extra = data.filter(p => p.goles_equipo1 !== null || p.goles_equipo2 !== null)
+              .map(p => ({
+                id_partido: p.id,
+                goles_equipo1: p.goles_equipo1 || 0,
+                goles_equipo2: p.goles_equipo2 || 0,
+                fase: p.fase
+              }));
+            // Evitar duplicados si ya estaban (aunque en el primer load no debería)
+            const filteredPrev = prev.filter(p => !extra.some(e => e.id_partido === p.id_partido));
+            return [...filteredPrev, ...extra];
+          });
+        }
       } catch (error) {
         console.error('Error cargando eliminatoria:', error);
       }
@@ -152,7 +190,7 @@ const Dashboard = () => {
     if (grupos.length === 0 || prediccionesGrupo.length === 0) return;
 
     let desdePosiciones = buildThirdPlacesFromPositions(grupos, prediccionesGrupo);
-    
+
     // Si hay terceros guardados desde el backend, aplicamos ese orden
     if (window.__savedTerceros && window.__savedTerceros.length > 0) {
       desdePosiciones = desdePosiciones.map(nt => {
@@ -160,13 +198,13 @@ const Dashboard = () => {
         return guardado ? { ...nt, __orderIndex: guardado.posicion } : { ...nt, __orderIndex: 999 };
       }).sort((a, b) => a.__orderIndex - b.__orderIndex)
         .map(({ __orderIndex, ...t }) => t);
-        
+
       window.__savedTerceros = null; // Ya lo aplicamos, lo limpiamos
     }
 
     setTercerosManual(prev => {
       if (prev.length === 0) return desdePosiciones;
-      
+
       // Intentar mantener el orden manual pero actualizar datos si cambiaron los equipos
       return desdePosiciones.map(nt => {
         const existente = prev.find(p => p.grupo === nt.grupo);
@@ -191,15 +229,15 @@ const Dashboard = () => {
         if (pFase[i]) {
           let mId = '';
           if (faseStr === '1/16') {
-             mId = i < 8 ? `r16a${i+1}` : `r16b${i-7}`;
+            mId = i < 8 ? `r16a${i + 1}` : `r16b${i - 7}`;
           } else if (faseStr === 'octavos') {
-             mId = i < 4 ? `r8a${i+1}` : `r8b${i-3}`;
+            mId = i < 4 ? `r8a${i + 1}` : `r8b${i - 3}`;
           } else if (faseStr === 'cuartos') {
-             mId = `qf${i+1}`;
+            mId = `qf${i + 1}`;
           } else if (faseStr === 'semis') {
-             mId = `sf${i+1}`;
+            mId = `sf${i + 1}`;
           } else if (faseStr === 'final') {
-             mId = 'fn1';
+            mId = 'fn1';
           }
           dbIdToBracketId[pFase[i].id] = mId;
         }
@@ -224,7 +262,7 @@ const Dashboard = () => {
         }
       }
     }
-    
+
     if (Object.keys(initialScores).length > 0) {
       setBracketScores(initialScores);
     }
@@ -343,7 +381,7 @@ const Dashboard = () => {
       const newScores = { ...prev };
       if (!newScores[matchId]) newScores[matchId] = { g1: 0, g2: 0 };
       newScores[matchId][team === 1 ? 'g1' : 'g2'] = numValue;
-      
+
       // Limpiar tie-breaker si deja de ser empate
       if (newScores[matchId].g1 !== newScores[matchId].g2) {
         setBracketTieBreakers(prevTB => {
@@ -381,39 +419,53 @@ const Dashboard = () => {
     try {
       const promesas = [];
 
-      // 1. Guardar Clasificados (Grupos)
-      if (prediccionesGrupo.length > 0) {
-        promesas.push(prediccionService.guardarGrupos(prediccionesGrupo));
+      if (isAdminMode) {
+        // ... (admin logic)
+        const partidosGrupos = prediccionesPartidos.filter(p => p.fase === 'grupos');
+        for (const p of partidosGrupos) {
+          promesas.push(adminService.actualizarMarcadorPartido(p.id_partido, p.goles_equipo1, p.goles_equipo2));
+        }
+        for (const g of grupos) {
+          const table = buildGroupTable(g.equipos, g.partidos, prediccionesPartidos);
+          if (table[0] && table[1]) {
+            promesas.push(adminService.establecerPosicionesGrupo(g.id, table[0].id, table[1].id));
+          }
+        }
+        if (typeof window.dispatchBracketSave === 'function') {
+          promesas.push(window.dispatchBracketSave(true));
+        }
+      } else {
+        // ── MODO USUARIO: Guardar PREDICCIONES ──
+        if (prediccionesGrupo.length > 0) {
+          promesas.push(prediccionService.guardarGrupos(prediccionesGrupo));
+        }
+        if (prediccionesPartidos.length > 0) {
+          promesas.push(prediccionService.guardarPartidos(prediccionesPartidos));
+        }
+        if (tercerosManual.length > 0) {
+          const tercerosPayload = tercerosManual.map((t, idx) => ({
+            id_equipo: t.id,
+            posicion: idx + 1,
+            clasificado_tercero: idx < 8
+          }));
+          promesas.push(prediccionService.guardarTerceros(tercerosPayload));
+        }
+        if (typeof window.dispatchBracketSave === 'function') {
+          promesas.push(window.dispatchBracketSave(false));
+        }
       }
 
-      // 2. Guardar Marcadores de Grupos
-      if (prediccionesPartidos.length > 0) {
-        promesas.push(prediccionService.guardarPartidos(prediccionesPartidos));
-      }
-
-      // 2.5 Guardar Terceros Manuales
-      if (tercerosManual.length > 0) {
-        const tercerosPayload = tercerosManual.map((t, idx) => ({
-          id_equipo: t.id,
-          posicion: idx + 1,
-          clasificado_tercero: idx < 8
-        }));
-        promesas.push(prediccionService.guardarTerceros(tercerosPayload));
-      }
-
-      // 3. Guardar Bracket
-      // Si el componente Bracket está montado, habrá registrado su función de despacho
-      if (typeof window.dispatchBracketSave === 'function') {
-        promesas.push(window.dispatchBracketSave());
-      }
-
-      // Ejecutar todas las promesas en paralelo
       await Promise.all(promesas);
 
-      setMensaje({ text: '¡Todas tus predicciones han sido guardadas correctamente!', type: 'success' });
+      setMensaje({
+        text: isAdminMode ? '¡Resultados reales guardados y puntos calculados!' : '¡Todas tus predicciones han sido guardadas!',
+        type: 'success'
+      });
+
+
       setTimeout(() => setMensaje({ text: '', type: '' }), 3000);
     } catch (error) {
-      setMensaje({ text: error.message || 'Error al guardar las predicciones', type: 'error' });
+      setMensaje({ text: error.message || 'Error al guardar', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -429,20 +481,23 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="dashboard-container">
+    <div className={`dashboard-container ${isAdminMode ? 'admin-mode' : ''}`}>
       <div className="dashboard-header">
         <div>
-          <h2>🏆 Dashboard de Predicciones</h2>
-          <p>Completa tus pronósticos para el Mundial 2026.</p>
+          <h2>{isAdminMode ? '⚙️ Panel Administrador' : '🏆 Dashboard de Predicciones'}</h2>
+          <p>{isAdminMode ? 'Carga los resultados reales del mundial.' : 'Completa tus pronósticos para el Mundial 2026.'}</p>
         </div>
         <div className="header-actions">
+
           <div className="view-selector">
-            <button
-              className={`view-btn ${view === 'clasificados' ? 'active' : ''}`}
-              onClick={() => setView('clasificados')}
-            >
-              🥈 Clasificados
-            </button>
+            {!isAdminMode && (
+              <button
+                className={`view-btn ${view === 'clasificados' ? 'active' : ''}`}
+                onClick={() => setView('clasificados')}
+              >
+                🥈 Clasificados
+              </button>
+            )}
             <button
               className={`view-btn ${view === 'partidos' ? 'active' : ''}`}
               onClick={() => setView('partidos')}
@@ -455,6 +510,7 @@ const Dashboard = () => {
             >
               📊 Tablas
             </button>
+
             <button
               className={`view-btn ${view === 'bracket' ? 'active' : ''}`}
               onClick={() => setView('bracket')}
@@ -462,6 +518,7 @@ const Dashboard = () => {
               🏟️ Bracket
             </button>
           </div>
+
           <div className="action-buttons">
             <button
               className="btn-primary"
@@ -590,7 +647,7 @@ const Dashboard = () => {
           <div className="partidos-list animate-fade-in">
             <div className="section-header-flex">
               <h3 className="section-title">Marcadores Grupo {grupos[grupoActivo].nombre}</h3>
-              <button 
+              <button
                 className="btn-secondary btn-sm"
                 onClick={handleResetPartidos}
               >

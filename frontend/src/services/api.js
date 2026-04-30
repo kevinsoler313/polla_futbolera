@@ -107,3 +107,28 @@ export const prediccionService = {
       body: JSON.stringify({ predicciones }),
     }).then(handleResponse),
 };
+
+// ── Administrador ───────────────────────────────────────────────────────────
+export const adminService = {
+  actualizarMarcadorPartido: (id_partido, goles_equipo1, goles_equipo2) =>
+    fetch(`${API_BASE}/admin/partido/${id_partido}/marcador`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ goles_equipo1, goles_equipo2 }),
+    }).then(handleResponse),
+
+  actualizarClasificadosLlave: (id_partido, id_equipo1, id_equipo2) =>
+    fetch(`${API_BASE}/admin/llave/${id_partido}/clasificados`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ id_equipo1, id_equipo2 }),
+    }).then(handleResponse),
+
+  establecerPosicionesGrupo: (id_grupo, id_equipo_1ro, id_equipo_2do) =>
+    fetch(`${API_BASE}/admin/grupo/${id_grupo}/posiciones`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ id_equipo_1ro, id_equipo_2do }),
+    }).then(handleResponse),
+};
+
