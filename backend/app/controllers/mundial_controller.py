@@ -8,7 +8,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.models import Equipo, Grupo, Partido
+from app.repositories.mundial_repository import GrupoRepository, EquipoRepository, PartidoRepository
 
 router = APIRouter(prefix="/api/mundial", tags=["Mundial"])
 
@@ -24,8 +24,8 @@ class EquipoResponse(BaseModel):
 
 class PartidoResponse(BaseModel):
     id: int
-    id_equipo1: int
-    id_equipo2: int
+    id_equipo1: Optional[int] = None
+    id_equipo2: Optional[int] = None
     goles_equipo1: Optional[int]
     goles_equipo2: Optional[int]
     fase: str
@@ -47,27 +47,22 @@ class GrupoResponse(BaseModel):
 @router.get("/grupos", response_model=List[GrupoResponse])
 def listar_grupos(db: Session = Depends(get_db)):
     """Lista todos los grupos con sus equipos y partidos."""
-    return db.query(Grupo).options(joinedload(Grupo.equipos)).order_by(Grupo.nombre).all()
+    return GrupoRepository(db).get_all_with_equipos()
 
 
 @router.get("/equipos", response_model=List[EquipoResponse])
 def listar_equipos(db: Session = Depends(get_db)):
     """Lista todos los equipos."""
-    return db.query(Equipo).order_by(Equipo.nombre).all()
+    return EquipoRepository(db).get_all_ordered()
 
 
 @router.get("/partidos", response_model=List[PartidoResponse])
 def listar_partidos(fase: Optional[str] = None, id_grupo: Optional[int] = None, db: Session = Depends(get_db)):
     """Lista partidos, filtrable por fase o grupo."""
-    query = db.query(Partido)
-    if fase:
-        query = query.filter(Partido.fase == fase)
-    if id_grupo:
-        query = query.filter(Partido.id_grupo == id_grupo)
-    return query.all()
+    return PartidoRepository(db).get_partidos(fase=fase, id_grupo=id_grupo)
 
 
 @router.get("/partidos/eliminatoria", response_model=List[PartidoResponse])
 def listar_partidos_eliminatoria(db: Session = Depends(get_db)):
     """Lista todos los partidos de fase eliminatoria (excluye fase de grupos)."""
-    return db.query(Partido).filter(Partido.fase != "grupos").all()
+    return PartidoRepository(db).get_partidos_eliminatoria()

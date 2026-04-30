@@ -12,7 +12,7 @@ from app.models import models
 from app.controllers import auth_controller, usuario_controller, prediccion_controller, mundial_controller
 from app.seed import seed_database
 
-# ── Crear tablas ───────────────────────────────────────────────────────────────
+# ── Crear tablas en la base de datos ───────────────────────────────────────────
 models.Base.metadata.create_all(bind=engine)
 
 # ── Semilla inicial ────────────────────────────────────────────────────────────

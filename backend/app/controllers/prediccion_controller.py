@@ -11,9 +11,13 @@ from app.models.models import Usuario, Partido, PrediccionPartido, PrediccionGru
 from app.schemas.prediccion_schema import (
     PrediccionPartidoCreate, PrediccionPartidoResponse,
     PrediccionGrupoCreate, PrediccionGrupoResponse,
-    BracketCreate
+    BracketCreate,
+    PrediccionTercerosCreate, PrediccionTercerosResponse,
+    PrediccionLlavesResponse
 )
 from app.controllers.security import get_current_user
+from app.repositories.mundial_repository import PartidoRepository, EquipoRepository, GrupoRepository
+from app.repositories.prediccion_repository import PrediccionPartidoRepository, PrediccionGrupoRepository, PrediccionTercerosRepository, PrediccionLlavesRepository
 
 router = APIRouter(prefix="/api/predicciones", tags=["Predicciones"])
 
@@ -27,9 +31,12 @@ def guardar_predicciones_partidos(
 ):
     """Guarda o actualiza las predicciones de resultados de partidos."""
     respuesta = []
+    partido_repo = PartidoRepository(db)
+    pred_repo = PrediccionPartidoRepository(db)
+
     for item in datos.predicciones:
         # Verificar que el partido existe
-        partido = db.query(Partido).filter(Partido.id == item.id_partido).first()
+        partido = partido_repo.get(item.id_partido)
         if not partido:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -37,31 +44,27 @@ def guardar_predicciones_partidos(
             )
 
         # Si ya existe predicción para ese partido, actualizar
-        pred = db.query(PrediccionPartido).filter(
-            PrediccionPartido.id_usuario == usuario.id,
-            PrediccionPartido.id_partido == item.id_partido
-        ).first()
+        pred = pred_repo.get_prediccion(usuario.id, item.id_partido)
 
         if pred:
-            pred.goles_equipo1 = item.goles_equipo1
-            pred.goles_equipo2 = item.goles_equipo2
-            pred.fase = item.fase
+            pred = pred_repo.update(pred, {
+                "goles_equipo1": item.goles_equipo1,
+                "goles_equipo2": item.goles_equipo2,
+                "fase": item.fase
+            })
         else:
-            pred = PrediccionPartido(
-                id_usuario=usuario.id,
-                id_partido=item.id_partido,
-                goles_equipo1=item.goles_equipo1,
-                goles_equipo2=item.goles_equipo2,
-                fase=item.fase,
-                id_equipo1=partido.id_equipo1,
-                id_equipo2=partido.id_equipo2,
-                puntaje=0,
-                acerto=False
-            )
-            db.add(pred)
+            pred = pred_repo.create({
+                "id_usuario": usuario.id,
+                "id_partido": item.id_partido,
+                "goles_equipo1": item.goles_equipo1,
+                "goles_equipo2": item.goles_equipo2,
+                "fase": item.fase,
+                "id_equipo1": partido.id_equipo1,
+                "id_equipo2": partido.id_equipo2,
+                "puntaje": 0,
+                "acerto": False
+            })
 
-        db.commit()
-        db.refresh(pred)
         respuesta.append(pred)
 
     return respuesta
@@ -73,9 +76,7 @@ def mis_predicciones_partidos(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Obtiene todas las predicciones de partidos del usuario actual."""
-    return db.query(PrediccionPartido).filter(
-        PrediccionPartido.id_usuario == usuario.id
-    ).all()
+    return PrediccionPartidoRepository(db).get_mis_predicciones(usuario.id)
 
 
 # ── Posiciones en grupos ───────────────────────────────────────────────────────
@@ -87,31 +88,28 @@ def guardar_predicciones_grupos(
 ):
     """Guarda o actualiza predicciones de clasificados por grupo (1.° y 2.° lugar)."""
     respuesta = []
+    equipo_repo = EquipoRepository(db)
+    pred_repo = PrediccionGrupoRepository(db)
+
     for item in datos.predicciones:
-        equipo = db.query(Equipo).filter(Equipo.id == item.id_equipo).first()
+        equipo = equipo_repo.get(item.id_equipo)
         if not equipo:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Equipo {item.id_equipo} no encontrado"
             )
 
-        pred = db.query(PrediccionGrupo).filter(
-            PrediccionGrupo.id_usuario == usuario.id,
-            PrediccionGrupo.id_equipo == item.id_equipo
-        ).first()
+        pred = pred_repo.get_prediccion(usuario.id, item.id_equipo)
 
         if pred:
-            pred.posicion = item.posicion
+            pred = pred_repo.update(pred, {"posicion": item.posicion})
         else:
-            pred = PrediccionGrupo(
-                id_usuario=usuario.id,
-                id_equipo=item.id_equipo,
-                posicion=item.posicion
-            )
-            db.add(pred)
+            pred = pred_repo.create({
+                "id_usuario": usuario.id,
+                "id_equipo": item.id_equipo,
+                "posicion": item.posicion
+            })
 
-        db.commit()
-        db.refresh(pred)
         respuesta.append(pred)
 
     return respuesta
@@ -123,9 +121,48 @@ def mis_predicciones_grupos(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Obtiene las predicciones de clasificados del usuario."""
-    return db.query(PrediccionGrupo).filter(
-        PrediccionGrupo.id_usuario == usuario.id
-    ).all()
+    return PrediccionGrupoRepository(db).get_mis_predicciones(usuario.id)
+
+
+@router.get("/terceros/mis", response_model=List[PrediccionTercerosResponse])
+def mis_predicciones_terceros(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """Obtiene los mejores terceros guardados del usuario."""
+    return PrediccionTercerosRepository(db).get_all_by_usuario(usuario.id)
+
+
+@router.get("/llaves/mis", response_model=List[PrediccionLlavesResponse])
+def mis_predicciones_llaves(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """Obtiene el mapeo de llaves guardadas del usuario."""
+    return PrediccionLlavesRepository(db).get_all_by_usuario(usuario.id)
+
+
+@router.post("/terceros", response_model=List[PrediccionTercerosResponse], status_code=201)
+def guardar_predicciones_terceros(
+    datos: PrediccionTercerosCreate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """Guarda las predicciones de mejores terceros seleccionados manualmente."""
+    repo = PrediccionTercerosRepository(db)
+    repo.delete_by_usuario(usuario.id)
+    
+    respuesta = []
+    for item in datos.predicciones:
+        pred = repo.create({
+            "id_usuario": usuario.id,
+            "id_equipo": item.id_equipo,
+            "clasificado_tercero": item.clasificado_tercero,
+            "posicion": item.posicion
+        })
+        respuesta.append(pred)
+    
+    return respuesta
 
 
 # ── Generación de Llaves de 16avos ──────────────────────────────────────────
@@ -138,11 +175,15 @@ def generar_llaves(
     Calcula los clasificados (1ros, 2dos, mejores 8 3ros) basado en las predicciones 
     de partidos del usuario y genera/actualiza las predicciones para la fase 1/16.
     """
+    pred_repo = PrediccionPartidoRepository(db)
+    partido_repo = PartidoRepository(db)
+    grupo_repo = GrupoRepository(db)
+    equipo_repo = EquipoRepository(db)
+    terceros_repo = PrediccionTercerosRepository(db)
+    llaves_repo = PrediccionLlavesRepository(db)
+
     # 1. Obtener todas las predicciones de partidos de fase de grupos del usuario
-    predicciones = db.query(PrediccionPartido).filter(
-        PrediccionPartido.id_usuario == usuario.id,
-        PrediccionPartido.fase == "grupos"
-    ).all()
+    predicciones = pred_repo.get_mis_predicciones_fase(usuario.id, "grupos")
     
     if not predicciones:
         raise HTTPException(status_code=400, detail="No hay predicciones de partidos guardadas.")
@@ -151,7 +192,7 @@ def generar_llaves(
     # Estructura: stats[id_grupo][id_equipo] = {"pts": 0, "dg": 0, "gf": 0}
     stats = defaultdict(lambda: {"pts": 0, "dg": 0, "gf": 0})
     
-    partidos_dict = {p.id: p for p in db.query(Partido).filter(Partido.fase == "grupos").all()}
+    partidos_dict = {p.id: p for p in partido_repo.get_partidos(fase="grupos")}
     
     for pred in predicciones:
         partido = partidos_dict.get(pred.id_partido)
@@ -189,9 +230,10 @@ def generar_llaves(
             grupos_stats[eq_stats["grupo"]].append((eq_id, eq_stats))
 
     # 3. Determinar posiciones por grupo
-    grupos_db = db.query(Grupo).all()
+    grupos_db = grupo_repo.get_all()
     grupo_nombre = {g.id: g.nombre for g in grupos_db}
-    equipo_grupo = {e.id: grupo_nombre[e.grupo_id] for e in db.query(Equipo).all()}
+    equipos_all = equipo_repo.get_all()
+    equipo_grupo = {e.id: grupo_nombre[e.grupo_id] for e in equipos_all}
     
     primeros = {}
     segundos = {}
@@ -211,31 +253,52 @@ def generar_llaves(
         if len(equipos) >= 1: 
             primeros[nom_grupo] = equipos[0][0]
         else:
-            # Fallback: tomar el primer equipo del grupo por ID si no hay predicciones
-            eq_def = db.query(Equipo).filter(Equipo.grupo_id == g.id).first()
+            # Fallback
+            eq_def = next((e for e in equipos_all if e.grupo_id == g.id), None)
             primeros[nom_grupo] = eq_def.id if eq_def else None
 
         if len(equipos) >= 2: 
             segundos[nom_grupo] = equipos[1][0]
         else:
-            eq_def = db.query(Equipo).filter(Equipo.grupo_id == g.id).offset(1).first()
-            segundos[nom_grupo] = eq_def.id if eq_def else None
+            # Fallback
+            eq_def = [e for e in equipos_all if e.grupo_id == g.id]
+            segundos[nom_grupo] = eq_def[1].id if len(eq_def) > 1 else None
 
         if len(equipos) >= 3: 
             terceros_lista.append(equipos[2])
         else:
-            eq_def = db.query(Equipo).filter(Equipo.grupo_id == g.id).offset(2).first()
-            if eq_def:
-                terceros_lista.append((eq_def.id, {"pts": 0, "dg": 0, "gf": 0}))
+            eq_def = [e for e in equipos_all if e.grupo_id == g.id]
+            if len(eq_def) > 2:
+                terceros_lista.append((eq_def[2].id, {"pts": 0, "dg": 0, "gf": 0}))
         
-    # Ordenar terceros para sacar los 8 mejores
-    terceros_lista.sort(
-        key=lambda x: (x[1]["pts"], x[1]["dg"], x[1]["gf"]),
-        reverse=True
-    )
-    mejores_terceros = [t[0] for t in terceros_lista[:8]]
+    # ── Determinar mejores terceros (Manual vs Calculado) ──────────────────────
+    terceros_guardados = terceros_repo.get_all_by_usuario(usuario.id)
+    
+    if terceros_guardados:
+        # Usar los que el usuario eligió manualmente con drag and drop, respetando su orden
+        # Filtramos solo los que marcó como clasificados
+        mejores_terceros = [t.id_equipo for t in terceros_guardados if t.clasificado_tercero]
+    else:
+        # Si no hay manuales, calcularlos automáticamente
+        terceros_lista.sort(
+            key=lambda x: (x[1]["pts"], x[1]["dg"], x[1]["gf"]),
+            reverse=True
+        )
+        mejores_terceros = [t[0] for t in terceros_lista[:8]]
+        
+        # Guardar el cálculo automático con una posición por defecto
+        for idx, eq_id in enumerate(mejores_terceros):
+            if eq_id:
+                terceros_repo.create({
+                    "id_usuario": usuario.id,
+                    "id_equipo": eq_id,
+                    "clasificado_tercero": True,
+                    "posicion": idx + 1
+                })
+    
     terceros_grupos = [equipo_grupo[eq_id] for eq_id in mejores_terceros if eq_id]
     terceros_dict = {equipo_grupo[eq_id]: eq_id for eq_id in mejores_terceros if eq_id}
+
     
     # 4. Asignar los 8 mejores terceros a sus slots válidos usando Backtracking (DFS)
     slots_terceros = [
@@ -288,48 +351,56 @@ def generar_llaves(
     ]
 
     # 6. Obtener partidos genéricos de 1/16 de la base de datos
-    partidos_16avos = db.query(Partido).filter(Partido.fase == "1/16").order_by(Partido.id).all()
+    partidos_16avos = partido_repo.get_partidos(fase="1/16")
+    partidos_16avos.sort(key=lambda p: p.id)
+    
     if len(partidos_16avos) != 16:
         raise HTTPException(status_code=500, detail="La base de datos no tiene los 16 partidos de 16avos configurados.")
         
-    # 7. Crear o actualizar PrediccionPartido para todas las fases eliminatorias (73 al 104)
-    partidos_todos = db.query(Partido).filter(Partido.fase != "grupos").all()
+    # 7. Crear o actualizar PrediccionPartido para todas las fases eliminatorias
+    partidos_todos = partido_repo.get_partidos_eliminatoria()
     llaves_generadas = []
     
-    # Crear un mapa rápido de los IDs de 1/16 para asignar los equipos calculados
+    # Limpiar predicción de llaves explícita antes de regenerar
+    llaves_repo.delete_by_usuario(usuario.id)
+    
+    # Mapa de IDs de 1/16 para asignar los equipos calculados
     id_to_teams = {partidos_16avos[i].id: llaves_orden[i] for i in range(16)}
 
     for partido_db in partidos_todos:
-        pred = db.query(PrediccionPartido).filter(
-            PrediccionPartido.id_usuario == usuario.id,
-            PrediccionPartido.id_partido == partido_db.id
-        ).first()
+        pred = pred_repo.get_prediccion(usuario.id, partido_db.id)
         
-        # Si es de 1/16, asignamos los equipos calculados
+        # Asignar equipos si es fase 1/16
         eq1_id, eq2_id = (None, None)
         if partido_db.id in id_to_teams:
             eq1_id, eq2_id = id_to_teams[partido_db.id]
 
         if pred:
+            update_data = {}
             if partido_db.id in id_to_teams:
-                pred.id_equipo1 = eq1_id
-                pred.id_equipo2 = eq2_id
+                update_data["id_equipo1"] = eq1_id
+                update_data["id_equipo2"] = eq2_id
+            if update_data:
+                pred = pred_repo.update(pred, update_data)
         else:
-            pred = PrediccionPartido(
-                id_usuario=usuario.id,
-                id_partido=partido_db.id,
-                goles_equipo1=0,
-                goles_equipo2=0,
-                fase=partido_db.fase,
-                id_equipo1=eq1_id,
-                id_equipo2=eq2_id,
-                puntaje=0,
-                acerto=False
-            )
-            db.add(pred)
+            pred = pred_repo.create({
+                "id_usuario": usuario.id,
+                "id_partido": partido_db.id,
+                "goles_equipo1": 0,
+                "goles_equipo2": 0,
+                "fase": partido_db.fase,
+                "id_equipo1": eq1_id,
+                "id_equipo2": eq2_id,
+                "puntaje": 0,
+                "acerto": False
+            })
             
-        db.flush()
-        
+        # 8. Guardar en tabla PrediccionLlaves para el seguimiento explícito del bracket
+        llaves_repo.create({
+            "id_usuario": usuario.id,
+            "id_prediccion_partido": pred.id
+        })
+            
         llaves_generadas.append({
             "id_partido": pred.id_partido,
             "id_equipo1": pred.id_equipo1,
@@ -337,9 +408,8 @@ def generar_llaves(
             "fase": pred.fase
         })
 
-    db.commit()
-
     return {"message": "Cuadro de torneo generado con éxito", "llaves": llaves_generadas}
+
 
 
 # ── Guardar predicciones de bracket (eliminatorias) ─────────────────────────
@@ -350,61 +420,39 @@ def guardar_bracket(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Guarda las predicciones de ganadores en la fase eliminatoria."""
-    winners = datos.winners
+    partido_repo = PartidoRepository(db)
+    equipo_repo = EquipoRepository(db)
+    pred_repo = PrediccionPartidoRepository(db)
+    
     saved = []
 
-    for match_id, equipo_ganador_id in winners.items():
-        partido = db.query(Partido).filter(Partido.id == match_id).first()
+    for item in datos.predicciones:
+        partido = partido_repo.get(item.id_partido)
         if not partido:
             continue
 
-        equipo1 = db.query(Equipo).filter(Equipo.id == partido.id_equipo1).first()
-        equipo2 = db.query(Equipo).filter(Equipo.id == partido.id_equipo2).first()
-
-        if not equipo1 or not equipo2:
-            continue
-
-        goles_ganador = 1
-        goles_perdedor = 0
-
-        if equipo_ganador_id == partido.id_equipo1:
-            goles_eq1 = goles_ganador
-            goles_eq2 = goles_perdedor
-        else:
-            goles_eq1 = goles_perdedor
-            goles_eq2 = goles_ganador
-
-        pred = db.query(PrediccionPartido).filter(
-            PrediccionPartido.id_usuario == usuario.id,
-            PrediccionPartido.id_partido == partido.id
-        ).first()
+        pred = pred_repo.get_prediccion(usuario.id, partido.id)
 
         if pred:
-            pred.goles_equipo1 = goles_eq1
-            pred.goles_equipo2 = goles_eq2
+            pred = pred_repo.update(pred, {
+                "goles_equipo1": item.goles_equipo1,
+                "goles_equipo2": item.goles_equipo2,
+                "id_equipo1": item.id_equipo1,
+                "id_equipo2": item.id_equipo2
+            })
         else:
-            pred = PrediccionPartido(
-                id_usuario=usuario.id,
-                id_partido=partido.id,
-                goles_equipo1=goles_eq1,
-                goles_equipo2=goles_eq2,
-                fase=partido.fase,
-                id_equipo1=partido.id_equipo1,
-                id_equipo2=partido.id_equipo2,
-                puntaje=0,
-                acerto=False
-            )
-            db.add(pred)
+            pred = pred_repo.create({
+                "id_usuario": usuario.id,
+                "id_partido": partido.id,
+                "goles_equipo1": item.goles_equipo1,
+                "goles_equipo2": item.goles_equipo2,
+                "fase": partido.fase,
+                "id_equipo1": item.id_equipo1,
+                "id_equipo2": item.id_equipo2,
+                "puntaje": 0,
+                "acerto": False
+            })
 
-        db.flush()
-        saved.append({
-            "id_partido": partido.id,
-            "id_equipo1": partido.id_equipo1,
-            "id_equipo2": partido.id_equipo2,
-            "ganador": equipo_ganador_id,
-            "fase": partido.fase,
-        })
-
-    db.commit()
+        saved.append(pred.id)
 
     return {"message": "Bracket guardado con éxito", "saved": len(saved)}

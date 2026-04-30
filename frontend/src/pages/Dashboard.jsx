@@ -115,14 +115,18 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataGrupos, dataPredGrupos, dataPredPartidos] = await Promise.all([
+        const [dataGrupos, dataPredGrupos, dataPredPartidos, dataTerceros] = await Promise.all([
           mundialService.grupos(),
           prediccionService.misGrupos(),
           prediccionService.misPartidos(),
+          prediccionService.misTerceros(),
         ]);
         setGrupos(dataGrupos);
         setPrediccionesGrupo(dataPredGrupos);
         setPrediccionesPartidos(dataPredPartidos);
+        
+        // Guardar la data de terceros temporalmente en el objeto window para usarla en el useEffect
+        window.__savedTerceros = dataTerceros || [];
       } catch (error) {
         console.error('Error cargando datos:', error);
       } finally {
@@ -147,8 +151,19 @@ const Dashboard = () => {
   useEffect(() => {
     if (grupos.length === 0 || prediccionesGrupo.length === 0) return;
 
-    const desdePosiciones = buildThirdPlacesFromPositions(grupos, prediccionesGrupo);
+    let desdePosiciones = buildThirdPlacesFromPositions(grupos, prediccionesGrupo);
     
+    // Si hay terceros guardados desde el backend, aplicamos ese orden
+    if (window.__savedTerceros && window.__savedTerceros.length > 0) {
+      desdePosiciones = desdePosiciones.map(nt => {
+        const guardado = window.__savedTerceros.find(st => st.id_equipo === nt.id);
+        return guardado ? { ...nt, __orderIndex: guardado.posicion } : { ...nt, __orderIndex: 999 };
+      }).sort((a, b) => a.__orderIndex - b.__orderIndex)
+        .map(({ __orderIndex, ...t }) => t);
+        
+      window.__savedTerceros = null; // Ya lo aplicamos, lo limpiamos
+    }
+
     setTercerosManual(prev => {
       if (prev.length === 0) return desdePosiciones;
       
@@ -163,6 +178,57 @@ const Dashboard = () => {
         .map(({ __orderIndex, ...t }) => t);
     });
   }, [grupos, prediccionesGrupo]);
+
+  // ── Restaurar Bracket desde DB ──────────────────────────────────────────
+  useEffect(() => {
+    if (partidosEliminatoria.length === 0 || prediccionesPartidos.length === 0) return;
+    if (Object.keys(bracketScores).length > 0) return; // Ya inicializado
+
+    const dbIdToBracketId = {};
+    const mapPhase = (faseStr, count) => {
+      const pFase = partidosEliminatoria.filter(p => p.fase === faseStr);
+      for (let i = 0; i < count; i++) {
+        if (pFase[i]) {
+          let mId = '';
+          if (faseStr === '1/16') {
+             mId = i < 8 ? `r16a${i+1}` : `r16b${i-7}`;
+          } else if (faseStr === 'octavos') {
+             mId = i < 4 ? `r8a${i+1}` : `r8b${i-3}`;
+          } else if (faseStr === 'cuartos') {
+             mId = `qf${i+1}`;
+          } else if (faseStr === 'semis') {
+             mId = `sf${i+1}`;
+          } else if (faseStr === 'final') {
+             mId = 'fn1';
+          }
+          dbIdToBracketId[pFase[i].id] = mId;
+        }
+      }
+    };
+
+    mapPhase('1/16', 16);
+    mapPhase('octavos', 8);
+    mapPhase('cuartos', 4);
+    mapPhase('semis', 2);
+    mapPhase('final', 1);
+
+    const initialScores = {};
+    for (const pred of prediccionesPartidos) {
+      if (pred.fase !== 'grupos') {
+        const mId = dbIdToBracketId[pred.id_partido];
+        if (mId) {
+          // Si el partido tiene goles guardados (1-0), lo restauramos para que avance
+          if (pred.goles_equipo1 > 0 || pred.goles_equipo2 > 0) {
+            initialScores[mId] = { g1: pred.goles_equipo1, g2: pred.goles_equipo2 };
+          }
+        }
+      }
+    }
+    
+    if (Object.keys(initialScores).length > 0) {
+      setBracketScores(initialScores);
+    }
+  }, [partidosEliminatoria, prediccionesPartidos, bracketScores]);
 
   // ── Drag & Drop: Grupos ──────────────────────────────────────────────────
   const handleDragStart = (e, grupoId, equipoId) => {
@@ -323,6 +389,16 @@ const Dashboard = () => {
       // 2. Guardar Marcadores de Grupos
       if (prediccionesPartidos.length > 0) {
         promesas.push(prediccionService.guardarPartidos(prediccionesPartidos));
+      }
+
+      // 2.5 Guardar Terceros Manuales
+      if (tercerosManual.length > 0) {
+        const tercerosPayload = tercerosManual.map((t, idx) => ({
+          id_equipo: t.id,
+          posicion: idx + 1,
+          clasificado_tercero: idx < 8
+        }));
+        promesas.push(prediccionService.guardarTerceros(tercerosPayload));
       }
 
       // 3. Guardar Bracket

@@ -14,6 +14,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.models import Usuario
 from app.schemas.usuario_schema import TokenData
+from app.repositories.usuario_repository import UsuarioRepository
 
 # Configuración de hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -57,7 +58,7 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    usuario = db.query(Usuario).filter(Usuario.id == token_data.id).first()
+    usuario = UsuarioRepository(db).get(token_data.id)
     if usuario is None:
         raise credentials_exception
     return usuario

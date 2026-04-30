@@ -317,20 +317,21 @@ const Bracket = ({
         'fn': 'final',
       };
 
-      const winnersWithMatchIds = {};
+      const bracketPredictions = [];
       
       // Recorrer todos los matches de la estructura para ver quién ganó
       for (const round of Object.values(BRACKET_STRUCTURE)) {
         for (const m of round) {
           const winner = getWinner(m.id);
+          const teams = getMatchTeams(m.id);
           const matchScores = scores[m.id] || { g1: 0, g2: 0 };
           
-          if (winner) {
+          if (winner && teams.equipo1 && teams.equipo2) {
             let fase = '';
             if (m.id.startsWith('r16')) fase = '1/16';
-            else if (m.id.startsWith('r8')) fase = '1/8';
-            else if (m.id.startsWith('qf')) fase = '1/4';
-            else if (m.id.startsWith('sf')) fase = 'semi';
+            else if (m.id.startsWith('r8')) fase = 'octavos';
+            else if (m.id.startsWith('qf')) fase = 'cuartos';
+            else if (m.id.startsWith('sf')) fase = 'semis';
             else if (m.id.startsWith('fn')) fase = 'final';
 
             const partidosFase = partidosEliminatoria.filter(p => p.fase === fase);
@@ -338,29 +339,42 @@ const Bracket = ({
             // (Lógica de index igual que antes...)
             if (fase === '1/16') {
               const zona = m.id.includes('a') ? 0 : 8;
-              const num = parseInt(m.id.replace(/[^0-9]/g, ''));
+              const numMatch = m.id.match(/\d+$/);
+              const num = numMatch ? parseInt(numMatch[0]) : 1;
               index = zona + (num - 1);
-            } else if (fase === '1/8') {
+            } else if (fase === 'octavos') {
               const zona = m.id.includes('a') ? 0 : 4;
-              const num = parseInt(m.id.replace(/[^0-9]/g, ''));
+              const numMatch = m.id.match(/\d+$/);
+              const num = numMatch ? parseInt(numMatch[0]) : 1;
               index = zona + (num - 1);
-            } else if (fase === '1/4') {
-              index = parseInt(m.id.replace(/[^0-9]/g, '')) - 1;
-            } else if (fase === 'semi') {
-              index = parseInt(m.id.replace(/[^0-9]/g, '')) - 1;
+            } else if (fase === 'cuartos') {
+              const numMatch = m.id.match(/\d+$/);
+              const num = numMatch ? parseInt(numMatch[0]) : 1;
+              index = num - 1;
+            } else if (fase === 'semis') {
+              const numMatch = m.id.match(/\d+$/);
+              const num = numMatch ? parseInt(numMatch[0]) : 1;
+              index = num - 1;
             } else if (fase === 'final') {
               index = 0;
             }
 
             if (index >= 0 && index < partidosFase.length) {
-              winnersWithMatchIds[partidosFase[index].id] = winner.id;
+              bracketPredictions.push({
+                id_partido: partidosFase[index].id,
+                id_equipo1: teams.equipo1.id,
+                id_equipo2: teams.equipo2.id,
+                goles_equipo1: matchScores.g1 === '' ? 0 : matchScores.g1,
+                goles_equipo2: matchScores.g2 === '' ? 0 : matchScores.g2,
+                ganador: winner.id
+              });
             }
           }
         }
       }
 
       if (onSave) {
-        await onSave(winnersWithMatchIds);
+        await onSave(bracketPredictions);
       }
       setMensaje({ text: '¡Bracket guardado con éxito!', type: 'success' });
       setTimeout(() => setMensaje({ text: '', type: '' }), 3000);

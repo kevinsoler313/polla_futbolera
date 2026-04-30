@@ -2,7 +2,7 @@
 Schemas Pydantic - Predicciones (apuestas iniciales de grupos)
 """
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 # ── Predicción de posición en grupo ──────────────────────────────────────────
@@ -45,15 +45,46 @@ class PrediccionPartidoResponse(BaseModel):
     puntaje: int
     acerto: bool
     fase: str
+    id_equipo1: Optional[int] = None
+    id_equipo2: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Predicción de Mejores Terceros ───────────────────────────────────────────
+class PrediccionTercerosItem(BaseModel):
+    id_equipo: int
+    clasificado_tercero: bool = True
+    posicion: int = 0
+
+class PrediccionTercerosCreate(BaseModel):
+    predicciones: List[PrediccionTercerosItem]
+
+class PrediccionTercerosResponse(BaseModel):
+    id: int
+    id_usuario: int
+    id_equipo: int
+    clasificado_tercero: bool
+    posicion: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
 
 # ── Predicción de bracket (eliminatorias) ─────────────────────────────────────
-class BracketWinnerItem(BaseModel):
+class BracketItemCreate(BaseModel):
     id_partido: int
-    id_equipo_ganador: int
-
+    id_equipo1: int
+    id_equipo2: int
+    goles_equipo1: int
+    goles_equipo2: int
+    ganador: int
 
 class BracketCreate(BaseModel):
-    winners: dict  # { "r16a1": equipo_id, "r8a1": equipo_id, ... }
+    predicciones: List[BracketItemCreate]
+
+class PrediccionLlavesResponse(BaseModel):
+    id: int
+    id_usuario: int
+    id_prediccion_partido: int
+
+    model_config = {"from_attributes": True}

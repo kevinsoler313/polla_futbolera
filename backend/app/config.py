@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "Polla Mundial 2026"
     DEBUG: bool = True
 
-    # Database
-    DATABASE_URL: str = "sqlite:///./polla_mundial.db"
+    # Database - Conexión a MySQL (XAMPP por defecto: usuario root, sin contraseña)
+    DATABASE_URL: str = "mysql+pymysql://root:@localhost:3306/polla_mundial"
 
     # JWT
     SECRET_KEY: str = "supersecretkey-cambia-esto-en-produccion-2026"

@@ -88,10 +88,22 @@ export const prediccionService = {
       headers: getHeaders(),
     }).then(handleResponse),
 
-  guardarBracket: (winners) =>
+  guardarTerceros: (predicciones) =>
+    fetch(`${API_BASE}/predicciones/terceros`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ predicciones }),
+    }).then(handleResponse),
+
+  misTerceros: () =>
+    fetch(`${API_BASE}/predicciones/terceros/mis`, {
+      headers: getHeaders(),
+    }).then(handleResponse),
+
+  guardarBracket: (predicciones) =>
     fetch(`${API_BASE}/predicciones/bracket`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ winners }),
+      body: JSON.stringify({ predicciones }),
     }).then(handleResponse),
 };

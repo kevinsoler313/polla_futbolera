@@ -153,6 +153,7 @@ class PrediccionTerceros(Base):
     id_usuario = Column(Integer, ForeignKey("usuario.id"), nullable=False)
     id_equipo = Column(Integer, ForeignKey("equipo.id"), nullable=False)
     clasificado_tercero = Column(Boolean, default=False)
+    posicion = Column(Integer, nullable=True)
 
     usuario = relationship("Usuario", back_populates="predicciones_terceros")
     equipo = relationship("Equipo")
