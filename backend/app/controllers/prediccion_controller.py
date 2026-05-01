@@ -15,11 +15,33 @@ from app.schemas.prediccion_schema import (
     PrediccionTercerosCreate, PrediccionTercerosResponse,
     PrediccionLlavesResponse
 )
+from app.schemas.usuario_schema import UsuarioResponse, DeadlineStatus
 from app.controllers.security import get_current_user
 from app.repositories.mundial_repository import PartidoRepository, EquipoRepository, GrupoRepository
 from app.repositories.prediccion_repository import PrediccionPartidoRepository, PrediccionGrupoRepository, PrediccionTercerosRepository, PrediccionLlavesRepository
+from app.services import deadline_service
 
 router = APIRouter(prefix="/api/predicciones", tags=["Predicciones"])
+
+
+def _verificar_apuestas_abiertas(usuario: Usuario):
+    """
+    Guard reutilizable: lanza 403 si el usuario ya confirmó o si el Mundial empezó.
+    Los admins siempre pueden editar.
+    """
+    if usuario.es_admin:
+        return  # Los admins nunca quedan bloqueados
+    if usuario.apuestas_confirmadas:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ya confirmaste tus apuestas. No puedes editarlas."
+        )
+    if not deadline_service.apuestas_abiertas():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Las apuestas están cerradas. El Mundial ya comenzó."
+        )
+
 
 
 # ── Partidos de grupos ─────────────────────────────────────────────────────────
@@ -30,6 +52,7 @@ def guardar_predicciones_partidos(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Guarda o actualiza las predicciones de resultados de partidos."""
+    _verificar_apuestas_abiertas(usuario)
     respuesta = []
     partido_repo = PartidoRepository(db)
     pred_repo = PrediccionPartidoRepository(db)
@@ -87,6 +110,7 @@ def guardar_predicciones_grupos(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Guarda o actualiza predicciones de clasificados por grupo (1.° y 2.° lugar)."""
+    _verificar_apuestas_abiertas(usuario)
     respuesta = []
     equipo_repo = EquipoRepository(db)
     pred_repo = PrediccionGrupoRepository(db)
@@ -149,6 +173,7 @@ def guardar_predicciones_terceros(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Guarda las predicciones de mejores terceros seleccionados manualmente."""
+    _verificar_apuestas_abiertas(usuario)
     repo = PrediccionTercerosRepository(db)
     repo.delete_by_usuario(usuario.id)
     
@@ -420,6 +445,7 @@ def guardar_bracket(
     usuario: Usuario = Depends(get_current_user)
 ):
     """Guarda las predicciones de ganadores en la fase eliminatoria."""
+    _verificar_apuestas_abiertas(usuario)
     partido_repo = PartidoRepository(db)
     equipo_repo = EquipoRepository(db)
     pred_repo = PrediccionPartidoRepository(db)
@@ -456,3 +482,34 @@ def guardar_bracket(
         saved.append(pred.id)
 
     return {"message": "Bracket guardado con éxito", "saved": len(saved)}
+
+
+# ── Confirmar Apuestas ─────────────────────────────────────────────────────────────────
+@router.post("/confirmar", response_model=UsuarioResponse)
+def confirmar_apuestas(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Confirma definitivamente las apuestas del usuario.
+    Una vez confirmadas, no se pueden modificar (ni el deadline te lo permite).
+    Solo disponible mientras las apuestas estén abiertas.
+    """
+    try:
+        usuario_actualizado = deadline_service.confirmar_apuestas(db, usuario)
+        return usuario_actualizado
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.get("/deadline", response_model=DeadlineStatus)
+def get_deadline(
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Retorna el estado de cierre de apuestas:
+    - Si están abiertas o cerradas
+    - La fecha exacta de cierre
+    - Segundos restantes para el cierre
+    """
+    return deadline_service.get_estado_apuestas()

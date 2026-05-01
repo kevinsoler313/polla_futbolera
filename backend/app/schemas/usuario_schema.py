@@ -3,6 +3,7 @@ Schemas Pydantic - Validación de datos de Usuario y Auth
 """
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
+from datetime import datetime
 
 
 # ── Registro ──────────────────────────────────────────────────────────────────
@@ -43,8 +44,17 @@ class UsuarioResponse(BaseModel):
     puntaje: int
     es_admin: bool
     aciertos_exactos: int
+    apuestas_confirmadas: bool = False
+    fecha_confirmacion: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ── Estado del cierre de apuestas ───────────────────────────────────────────
+class DeadlineStatus(BaseModel):
+    abiertas: bool
+    fecha_cierre: str
+    segundos_restantes: int
 
 
 # ── Token JWT ──────────────────────────────────────────────────────────────────

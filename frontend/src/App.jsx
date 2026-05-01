@@ -1,9 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import PrivateRoute from './components/PrivateRoute'
+import HelpButton from './components/ui/HelpButton'
 
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Ranking from './pages/Ranking'
 
 function App() {
   return (
@@ -17,9 +19,16 @@ function App() {
               <Dashboard />
             </PrivateRoute>
           } />
+          <Route path="/ranking" element={
+            <PrivateRoute>
+              <Ranking />
+            </PrivateRoute>
+          } />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
+      {/* Botón de ayuda flotante — visible en todas las páginas */}
+      <HelpButton />
     </>
   )
 }

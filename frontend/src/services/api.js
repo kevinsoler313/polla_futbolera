@@ -88,6 +88,17 @@ export const prediccionService = {
       headers: getHeaders(),
     }).then(handleResponse),
 
+  /** Confirma las apuestas del usuario. Una vez confirmado, no puede editar. */
+  confirmar: () =>
+    fetch(`${API_BASE}/predicciones/confirmar`, {
+      method: "POST",
+      headers: getHeaders(),
+    }).then(handleResponse),
+
+  /** Estado del cierre de apuestas: si están abiertas, fecha de cierre, segundos restantes. */
+  getDeadline: () =>
+    fetch(`${API_BASE}/predicciones/deadline`, { headers: getHeaders() }).then(handleResponse),
+
   guardarTerceros: (predicciones) =>
     fetch(`${API_BASE}/predicciones/terceros`, {
       method: "POST",
@@ -132,3 +143,33 @@ export const adminService = {
     }).then(handleResponse),
 };
 
+// ── Ligas Privadas y Rankings ────────────────────────────────────────────────
+export const ligaService = {
+  /** Crea una nueva liga. El usuario autenticado se une automáticamente. */
+  crearLiga: (nombre) =>
+    fetch(`${API_BASE}/ligas`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ nombre }),
+    }).then(handleResponse),
+
+  /** Une al usuario a una liga usando su código SKJ26-XXXXX. */
+  unirseALiga: (codigo) =>
+    fetch(`${API_BASE}/ligas/join`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ codigo }),
+    }).then(handleResponse),
+
+  /** Obtiene todas las ligas del usuario autenticado. */
+  misLigas: () =>
+    fetch(`${API_BASE}/ligas/mis-ligas`, { headers: getHeaders() }).then(handleResponse),
+
+  /** Obtiene el ranking global (todos los usuarios, sin admins). */
+  rankingGlobal: () =>
+    fetch(`${API_BASE}/ligas/ranking-global`, { headers: getHeaders() }).then(handleResponse),
+
+  /** Obtiene el ranking de una liga específica. */
+  rankingLiga: (idLiga) =>
+    fetch(`${API_BASE}/ligas/${idLiga}/ranking`, { headers: getHeaders() }).then(handleResponse),
+};

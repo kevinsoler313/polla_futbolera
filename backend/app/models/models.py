@@ -3,7 +3,7 @@ Modelos de base de datos - Polla Mundial 2026
 Basado en el diagrama de relaciones proporcionado.
 """
 from sqlalchemy import (
-    Column, Integer, String, Boolean, ForeignKey, Float
+    Column, Integer, String, Boolean, ForeignKey, Float, DateTime
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -22,6 +22,8 @@ class Usuario(Base):
     puntaje = Column(Integer, default=0)
     es_admin = Column(Boolean, default=False)
     aciertos_exactos = Column(Integer, default=0)
+    apuestas_confirmadas = Column(Boolean, default=False)     # Bloqueo definitivo
+    fecha_confirmacion = Column(DateTime, nullable=True)      # Cuándo confirmó
 
     # Relaciones
     predicciones_partido = relationship("PrediccionPartido", back_populates="usuario")
@@ -173,3 +175,34 @@ class TercerosClasificados(Base):
     posicion = Column(Integer, nullable=True) # 1-8
 
     equipo = relationship("Equipo")
+
+
+# ─────────────────────────────────────────────
+# LIGA PRIVADA
+# ─────────────────────────────────────────────
+class Liga(Base):
+    __tablename__ = "liga"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(100), nullable=False)
+    codigo = Column(String(20), unique=True, nullable=False, index=True)  # Ej: SKJ26-A9X2B
+    id_admin = Column(Integer, ForeignKey("usuario.id"), nullable=False)  # Quién la creó
+
+    # Relaciones
+    admin = relationship("Usuario", foreign_keys=[id_admin])
+    miembros = relationship("LigaUsuario", back_populates="liga")
+
+
+# ─────────────────────────────────────────────
+# MIEMBROS DE LIGA (muchos a muchos: Liga ↔ Usuario)
+# ─────────────────────────────────────────────
+class LigaUsuario(Base):
+    __tablename__ = "liga_usuario"
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_liga = Column(Integer, ForeignKey("liga.id"), nullable=False)
+    id_usuario = Column(Integer, ForeignKey("usuario.id"), nullable=False)
+
+    liga = relationship("Liga", back_populates="miembros")
+    usuario = relationship("Usuario")
+

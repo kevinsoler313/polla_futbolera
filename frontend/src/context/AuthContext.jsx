@@ -17,7 +17,10 @@ export const AuthProvider = ({ children }) => {
       authService
         .me()
         .then((u) => setUsuario(u))
-        .catch(() => localStorage.removeItem("token"))
+        .catch(() => {
+          // Token inválido o expirado: limpiar sesión silenciosamente
+          localStorage.removeItem("token");
+        })
         .finally(() => setCargando(false));
     } else {
       setCargando(false);
@@ -34,8 +37,13 @@ export const AuthProvider = ({ children }) => {
     setUsuario(null);
   };
 
+  /** Actualiza campos específicos del usuario en memoria sin recargar del servidor */
+  const updateUsuario = (cambios) => {
+    setUsuario(prev => prev ? { ...prev, ...cambios } : prev);
+  };
+
   return (
-    <AuthContext.Provider value={{ usuario, cargando, login, logout }}>
+    <AuthContext.Provider value={{ usuario, setUsuario, cargando, login, logout, updateUsuario }}>
       {children}
     </AuthContext.Provider>
   );

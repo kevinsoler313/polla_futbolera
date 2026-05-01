@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # CORS
     FRONTEND_URL: str = "http://localhost:5174"
 
+    # Fecha de inicio del Mundial (cierre de apuestas)
+    # Formato ISO 8601: "2026-06-11T15:00:00" (hora Colombia UTC-5)
+    # Cuando no está definida, las apuestas permanecen abiertas
+    FECHA_INICIO_MUNDIAL: str = "2026-06-11T15:00:00"
+
     class Config:
         env_file = ".env"
 
