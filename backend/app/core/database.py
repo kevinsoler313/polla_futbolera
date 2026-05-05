@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from app.config import settings
+from app.core.config import settings
 
 # Crear el motor de la base de datos (MySQL/PostgreSQL)
 engine = create_engine(settings.DATABASE_URL)

@@ -4,11 +4,11 @@ Controller de Autenticación - Registro y Login
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models.models import Usuario
 from app.schemas.usuario_schema import UsuarioCreate, UsuarioLogin, UsuarioResponse, Token
 from app.repositories.usuario_repository import UsuarioRepository
-from app.controllers.security import (
+from app.core.security import (
     hash_password, verify_password, create_access_token, get_current_user
 )
 

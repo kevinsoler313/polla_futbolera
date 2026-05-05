@@ -6,11 +6,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
-from app.database import engine, SessionLocal
+from app.core.config import settings
+from app.core.database import engine, SessionLocal
 from app.models import models
 from app.controllers import auth_controller, usuario_controller, prediccion_controller, mundial_controller
-from app.seed import seed_database
+from app.core.seed import seed_database
 
 # ── Crear tablas en la base de datos ───────────────────────────────────────────
 models.Base.metadata.create_all(bind=engine)

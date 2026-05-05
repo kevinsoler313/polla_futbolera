@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database - Conexión a MySQL (XAMPP por defecto: usuario root, sin contraseña)
-    DATABASE_URL: str = "mysql+pymysql://root:@localhost:3306/polla_mundial"
+    DATABASE_URL: str = "mysql+pymysql://root:@localhost:3307/polla_mundial"
 
     # JWT
     SECRET_KEY: str = "supersecretkey-cambia-esto-en-produccion-2026"

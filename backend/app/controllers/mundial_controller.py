@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.database import get_db
+from app.core.database import get_db
 from app.repositories.mundial_repository import GrupoRepository, EquipoRepository, PartidoRepository
 
 router = APIRouter(prefix="/api/mundial", tags=["Mundial"])

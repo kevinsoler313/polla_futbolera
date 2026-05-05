@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models.models import Usuario, Partido, Grupo
-from app.controllers.security import get_current_admin
+from app.core.security import get_current_admin
 from app.services.puntaje_service import (
     procesar_resultado_partido, 
     procesar_clasificados_llave,

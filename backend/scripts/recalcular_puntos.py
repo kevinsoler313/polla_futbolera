@@ -8,7 +8,7 @@ import sys
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-from app.database import SessionLocal
+from app.core.database import SessionLocal
 from app.models.models import Usuario, PrediccionPartido, Partido, PrediccionGrupo, GrupoPosiciones
 from app.services.puntaje_service import procesar_resultado_partido, procesar_clasificados_grupo
 

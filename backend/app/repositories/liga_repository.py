@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Liga Repository - Acceso a datos para Ligas Privadas
 Responsabilidad única: operaciones de base de datos sobre liga y liga_usuario.

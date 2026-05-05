@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict
 from collections import defaultdict
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models.models import Usuario, Partido, PrediccionPartido, PrediccionGrupo, Equipo, Grupo
 from app.schemas.prediccion_schema import (
     PrediccionPartidoCreate, PrediccionPartidoResponse,
@@ -16,7 +16,7 @@ from app.schemas.prediccion_schema import (
     PrediccionLlavesResponse
 )
 from app.schemas.usuario_schema import UsuarioResponse, DeadlineStatus
-from app.controllers.security import get_current_user
+from app.core.security import get_current_user
 from app.repositories.mundial_repository import PartidoRepository, EquipoRepository, GrupoRepository
 from app.repositories.prediccion_repository import PrediccionPartidoRepository, PrediccionGrupoRepository, PrediccionTercerosRepository, PrediccionLlavesRepository
 from app.services import deadline_service

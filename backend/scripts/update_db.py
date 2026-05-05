@@ -1,6 +1,6 @@
 import sys
 from sqlalchemy import text
-from app.database import engine
+from app.core.database import engine
 
 def main():
     try:

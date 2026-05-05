@@ -5,7 +5,7 @@ import sys
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-from app.database import SessionLocal
+from app.core.database import SessionLocal
 from app.models.models import Usuario, PrediccionPartido, Partido
 
 db = SessionLocal()
